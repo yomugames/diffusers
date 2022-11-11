@@ -3,6 +3,7 @@ import hashlib
 import itertools
 import math
 import os
+import pprint
 from pathlib import Path
 from typing import Optional
 
@@ -196,6 +197,22 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
+
+    # copied arguments from https://github.com/TheLastBen/diffusers/blob/main/examples/dreambooth/train_dreambooth.py
+    # to support the methods in https://colab.research.google.com/github/TheLastBen/fast-stable-diffusion/blob/main/fast-DreamBooth.ipynb
+    parser.add_argument(
+        "--dump_only_text_encoder",
+        action="store_true",
+        default=False,
+        help="Dump only text encoder",
+    )
+
+    parser.add_argument(
+        "--train_only_unet",
+        action="store_true",
+        default=False,
+        help="Train only the unet",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -418,11 +435,19 @@ def main(args):
         )
 
     # Load models and create wrapper for stable diffusion
-    text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="text_encoder",
-        revision=args.revision,
-    )
+    if args.train_only_unet:
+        text_encoder = CLIPTextModel.from_pretrained(
+            args.output_dir, 
+            subfolder="text_encoder_trained",
+            revision=args.revision,
+        )
+    else:
+        text_encoder = CLIPTextModel.from_pretrained(
+            args.pretrained_model_name_or_path, 
+            subfolder="text_encoder",
+            revision=args.revision,
+        )
+
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="vae",
@@ -472,7 +497,9 @@ def main(args):
         eps=args.adam_epsilon,
     )
 
-    noise_scheduler = DDPMScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
+    noise_scheduler = DDPMScheduler(
+        beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000
+    )
 
     train_dataset = DreamBoothDataset(
         instance_data_root=args.instance_data_dir,
@@ -483,6 +510,8 @@ def main(args):
         size=args.resolution,
         center_crop=args.center_crop,
     )
+
+    pprint.pprint(vars(train_dataset))
 
     def collate_fn(examples):
         input_ids = [example["instance_prompt_ids"] for example in examples]
@@ -649,16 +678,36 @@ def main(args):
 
     # Create the pipeline using using the trained modules and save it.
     if accelerator.is_main_process:
-        pipeline = StableDiffusionPipeline.from_pretrained(
-            args.pretrained_model_name_or_path,
-            unet=accelerator.unwrap_model(unet),
-            text_encoder=accelerator.unwrap_model(text_encoder),
-            revision=args.revision,
-        )
-        pipeline.save_pretrained(args.output_dir)
+        if args.dump_only_text_encoder:
+            txt_dir=args.output_dir + "/text_encoder_trained"
+            if not os.path.exists(txt_dir):
+                os.mkdir(txt_dir)
+            pipeline = StableDiffusionPipeline.from_pretrained(
+                args.pretrained_model_name_or_path,
+                unet=accelerator.unwrap_model(unet),
+                text_encoder=accelerator.unwrap_model(text_encoder),
+            )
+            pipeline.text_encoder.save_pretrained(txt_dir)
+        elif args.train_only_unet:
+            pipeline = StableDiffusionPipeline.from_pretrained(
+                args.pretrained_model_name_or_path,
+                unet=accelerator.unwrap_model(unet),
+                text_encoder=accelerator.unwrap_model(text_encoder),
+            )
+            pipeline.save_pretrained(args.output_dir)
+            txt_dir=args.output_dir + "/text_encoder_trained"
+            subprocess.call('rm -r '+txt_dir, shell=True)
+        else:
+            pipeline = StableDiffusionPipeline.from_pretrained(
+                args.pretrained_model_name_or_path,
+                unet=accelerator.unwrap_model(unet),
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                revision=args.revision,
+            )
+            pipeline.save_pretrained(args.output_dir)
 
-        if args.push_to_hub:
-            repo.push_to_hub(commit_message="End of training", blocking=False, auto_lfs_prune=True)
+            if args.push_to_hub:
+                repo.push_to_hub(commit_message="End of training", blocking=False, auto_lfs_prune=True)
 
     accelerator.end_training()
 
