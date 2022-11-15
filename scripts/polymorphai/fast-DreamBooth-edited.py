@@ -533,7 +533,7 @@ Use_Gradio_Server = False #@param {type:"boolean"}
 share=''
 if Use_Gradio_Server:
   share='--share'
-  for line in fileinput.input('/usr/local/lib/python3.7/dist-packages/gradio/blocks.py', inplace=True):
+  for line in fileinput.input('/opt/conda/envs/pytorch/lib/python3.9/site-packages/gradio/blocks.py', inplace=True):
     if line.strip().startswith('self.server_name ='):
         line = '            self.server_name = server_name\n'
     if line.strip().startswith('self.server_port ='):
@@ -551,7 +551,7 @@ else:
   time.sleep(2)
   srv= getoutput('cat /content/srvr.txt')
 
-  for line in fileinput.input('/usr/local/lib/python3.7/dist-packages/gradio/blocks.py', inplace=True):
+  for line in fileinput.input('/opt/conda/envs/pytorch/lib/python3.9/site-packages/gradio/blocks.py', inplace=True):
     if line.strip().startswith('self.server_name ='):
         line = f'            self.server_name = "{srv[8:]}"\n'
     if line.strip().startswith('self.server_port ='):
@@ -560,7 +560,7 @@ else:
         line = '            self.protocol = "https"\n'
     sys.stdout.write(line)
 
-  get_ipython().system('sed -i \'13s@.*@    "PUBLIC_SHARE_TRUE": "\x1b[32mConnected",@\' /usr/local/lib/python3.7/dist-packages/gradio/strings.py')
+  get_ipython().system('sed -i \'13s@.*@    "PUBLIC_SHARE_TRUE": "\x1b[32mConnected",@\' /opt/conda/envs/pytorch/lib/python3.9/site-packages/gradio/strings.py')
   
   get_ipython().system('rm /content/srv.txt')
   get_ipython().system('rm /content/srvr.txt')
