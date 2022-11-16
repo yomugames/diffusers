@@ -26,6 +26,7 @@ from IPython.utils import capture
 with capture.capture_output() as cap: 
   get_ipython().run_line_magic('cd', '/content/')
 
+Update_repo = True #@param {type:"boolean"}
 Huggingface_Token = "" #@param {type:"string"}
 token=Huggingface_Token
 
@@ -185,3 +186,51 @@ elif CKPT_Link !="":
            time.sleep(5)
 else:
   downloadmodel()
+
+
+         
+with capture.capture_output() as cap:
+    get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/')
+    get_ipython().run_line_magic('mkdir', 'sd')
+    get_ipython().run_line_magic('cd', 'sd')
+    get_ipython().system('git clone https://github.com/CompVis/stable-diffusion')
+    get_ipython().system('git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui')
+    get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui/')
+    get_ipython().system('mkdir -p cache/{huggingface,torch}')
+    get_ipython().run_line_magic('cd', '/content/')
+    get_ipython().system('ln -s /content/gdrive/MyDrive/sd/stable-diffusion-webui/cache/huggingface ../root/.cache/')
+    get_ipython().system('ln -s /content/gdrive/MyDrive/sd/stable-diffusion-webui/cache/torch ../root/.cache/')
+
+if Update_repo:
+  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/webui.sh')
+  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/modules/paths.py')
+  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/webui.py')
+  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/modules/ui.py')
+  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/style.css')
+  get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui/')
+  clear_output()
+  print('[1;32m')
+  get_ipython().system('git pull')
+
+
+with capture.capture_output() as cap:  
+  if not os.path.exists('/content/gdrive/MyDrive/sd/stable-diffusion/src/k-diffusion/k_diffusion'):
+    get_ipython().system('mkdir /content/gdrive/MyDrive/sd/stable-diffusion/src')
+    get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion/src')
+    get_ipython().system('git clone https://github.com/CompVis/taming-transformers')
+    get_ipython().system('git clone https://github.com/openai/CLIP')
+    get_ipython().system('mv /content/gdrive/MyDrive/sd/stable-diffusion/src/CLIP /content/gdrive/MyDrive/sd/stable-diffusion/src/clip')
+    get_ipython().system('git clone https://github.com/TencentARC/GFPGAN')
+    get_ipython().system('mv  /content/gdrive/MyDrive/sd/stable-diffusion/src/GFPGAN/gfpgan /content/gdrive/MyDrive/sd/stable-diffusion-webui')
+    get_ipython().system('git clone https://github.com/salesforce/BLIP')
+    get_ipython().system('mv  /content/gdrive/MyDrive/sd/stable-diffusion/src/BLIP /content/gdrive/MyDrive/sd/stable-diffusion/src/blip')
+    get_ipython().system('git clone https://github.com/sczhou/CodeFormer')
+    get_ipython().system('mv  /content/gdrive/MyDrive/sd/stable-diffusion/src/CodeFormer /content/gdrive/MyDrive/sd/stable-diffusion/src/codeformer')
+    get_ipython().system('git clone https://github.com/xinntao/Real-ESRGAN')
+    get_ipython().system('mv  /content/gdrive/MyDrive/sd/stable-diffusion/src/Real-ESRGAN/ /content/gdrive/MyDrive/sd/stable-diffusion/src/realesrgan')
+    get_ipython().system('git clone https://github.com/crowsonkb/k-diffusion.git')
+    get_ipython().system('cp -r /content/gdrive/MyDrive/sd/stable-diffusion/src/k-diffusion/k_diffusion /content/gdrive/MyDrive/sd/stable-diffusion-webui')
+    get_ipython().system('git clone https://github.com/Hafiidz/latent-diffusion')
+    get_ipython().system('cp -r  /content/gdrive/MyDrive/sd/stable-diffusion/ldm /content/gdrive/MyDrive/sd/stable-diffusion-webui/')
+
+

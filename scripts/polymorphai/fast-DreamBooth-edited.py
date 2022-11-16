@@ -12,31 +12,49 @@
 
 
 import os
+import argparse
 import sys
 from IPython.display import clear_output
 from IPython.utils import capture
-import wget
+import requests
 import time
+import json
 
 #@markdown #Create/Load a Session
 
 # params
-Training_Steps=2700 #@param{type: 'number'}
+fp16 = True
 IMAGES_FOLDER_OPTIONAL="/content/input_images" #@param{type: 'string'}
 
 MODEL_NAME="/content/stable-diffusion-v1-5"
-PT="photo of law_xyz person"
+PT="photo of user_xyz person"
 CPT="photo of a person"
 
 Captionned_instance_images = False
 
-Session_Name = "" #@param{type: 'string'}
-while Session_Name=="":
-  print('[1;31mInput the Session Name:') 
-  Session_Name=input('')
+
+parser = argparse.ArgumentParser(description="Dreambooth training script.")
+parser.add_argument(
+    "--session",
+    type=str,
+    help="the session name for dreambooth train + inference"
+)
+
+parser.add_argument(
+    "--s3images",
+    type=str,
+    help="the array of images for dreambooth to train"
+)
+
+opt = parser.parse_args()
+
+Session_Name = opt.session #@param{type: 'string'}
+S3_image_list = json.loads(opt.s3images)
+
+Training_Steps=len(S3_image_list) * 100   #2700 #@param{type: 'number'}
+
 Session_Name=Session_Name.replace(" ","_")
 
-#@markdown - Enter the session name, it if it exists, it will load it, otherwise it'll create an new session.
 
 Session_Link_optional = "" #@param{type: 'string'}
 
@@ -155,6 +173,18 @@ Remove_existing_instance_images= True #@param{type: 'boolean'}
 #@markdown - Uncheck the box to keep the existing instance images.
 
 
+def download_images(s3_image_list, dest_dir):
+  get_ipython().system('rm -r "$IMAGES_FOLDER_OPTIONAL"')
+  get_ipython().system('mkdir -p "$IMAGES_FOLDER_OPTIONAL"')
+  
+  for url in s3_image_list:
+    filename = url
+    if url.find('/'):
+      filename = url.rsplit('/', 1)[1]
+    r = requests.get(url, allow_redirects=True)
+
+    open(dest_dir + '/' + filename, 'wb').write(r.content)
+  
 
 # get images of faces somewhere, then copy it to instance dir
 def prepare_images():
@@ -168,7 +198,7 @@ def prepare_images():
 
   #@markdown - If you prefer to specify directly the folder of the pictures instead of uploading, this will add the pictures to the existing (if any) instance images. Leave EMPTY to upload.
 
-  Crop_images= False #@param{type: 'boolean'}
+  Crop_images= True #@param{type: 'boolean'}
   Crop_size=512 #@param{type: 'number'}
 
   #@markdown - Unless you want to crop them manually in a precise way, you don't need to crop your instance images externally.
@@ -217,7 +247,7 @@ def prepare_images():
     get_ipython().system('zip -r instance_images instance_images')
     get_ipython().run_line_magic('cd', '/content')
 
-
+download_images(S3_image_list, IMAGES_FOLDER_OPTIONAL)
 prepare_images()
 
 # # Training
@@ -254,7 +284,6 @@ else:
 
 #@markdown - Leave empty for a random seed.
 
-fp16 = True
 if fp16:
   prec="fp16"
 else:
@@ -388,191 +417,6 @@ if os.path.exists('/content/models/'+INSTANCE_NAME+'/unet/diffusion_pytorch_mode
 else:
   print("[1;31mSomething went wrong")
 
-
-# # Test The Trained Model
-
-# In[ ]:
-
-
-import os
-import time
-import sys
-import fileinput
-from IPython.display import clear_output
-from subprocess import getoutput
-from IPython.utils import capture
-
-Update_repo = True #@param {type:"boolean"}
-
-Session__Name="" #@param{type: 'string'}
-
-#@markdown - Or Session_Name, Leave empty if you want to use the current trained model.
-
-Use_Custom_Path = False #@param {type:"boolean"}
-
-try:
-  INSTANCE_NAME
-  INSTANCET=INSTANCE_NAME  
-except:
-  pass
-#@markdown - if checked, an input box will ask the full path to a desired model
-
-if Session__Name!="":
-  INSTANCET=Session__Name
-  INSTANCET=INSTANCET.replace(" ","_")
-
-if Use_Custom_Path:
-  try:
-    INSTANCET
-    del INSTANCET
-  except:
-    pass
-
-try:
-  INSTANCET
-  path_to_trained_model=SESSION_DIR+"/"+INSTANCET+'.ckpt'
-except:
-  print('[1;31mIt seems that you did not perform training during this session [1;32mor you chose to use a custom path,\nprovide the full path to the model (including the name of the model):\n')
-  path_to_trained_model=input()
-     
-while not os.path.exists(path_to_trained_model):
-   print("[1;31mThe model doesn't exist on you Gdrive, use the file explorer to get the path : ")
-   path_to_trained_model=input()
-
-         
-with capture.capture_output() as cap:
-    get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/')
-    get_ipython().run_line_magic('mkdir', 'sd')
-    get_ipython().run_line_magic('cd', 'sd')
-    get_ipython().system('git clone https://github.com/CompVis/stable-diffusion')
-    get_ipython().system('git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui')
-    get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui/')
-    get_ipython().system('mkdir -p cache/{huggingface,torch}')
-    get_ipython().run_line_magic('cd', '/content/')
-    get_ipython().system('ln -s /content/gdrive/MyDrive/sd/stable-diffusion-webui/cache/huggingface ../root/.cache/')
-    get_ipython().system('ln -s /content/gdrive/MyDrive/sd/stable-diffusion-webui/cache/torch ../root/.cache/')
-
-if Update_repo:
-  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/webui.sh')
-  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/modules/paths.py')
-  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/webui.py')
-  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/modules/ui.py')
-  get_ipython().system('rm /content/gdrive/MyDrive/sd/stable-diffusion-webui/style.css')
-  get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui/')
-  clear_output()
-  print('[1;32m')
-  get_ipython().system('git pull')
-
-
-with capture.capture_output() as cap:  
-  if not os.path.exists('/content/gdrive/MyDrive/sd/stable-diffusion/src/k-diffusion/k_diffusion'):
-    get_ipython().system('mkdir /content/gdrive/MyDrive/sd/stable-diffusion/src')
-    get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion/src')
-    get_ipython().system('git clone https://github.com/CompVis/taming-transformers')
-    get_ipython().system('git clone https://github.com/openai/CLIP')
-    get_ipython().system('mv /content/gdrive/MyDrive/sd/stable-diffusion/src/CLIP /content/gdrive/MyDrive/sd/stable-diffusion/src/clip')
-    get_ipython().system('git clone https://github.com/TencentARC/GFPGAN')
-    get_ipython().system('mv  /content/gdrive/MyDrive/sd/stable-diffusion/src/GFPGAN/gfpgan /content/gdrive/MyDrive/sd/stable-diffusion-webui')
-    get_ipython().system('git clone https://github.com/salesforce/BLIP')
-    get_ipython().system('mv  /content/gdrive/MyDrive/sd/stable-diffusion/src/BLIP /content/gdrive/MyDrive/sd/stable-diffusion/src/blip')
-    get_ipython().system('git clone https://github.com/sczhou/CodeFormer')
-    get_ipython().system('mv  /content/gdrive/MyDrive/sd/stable-diffusion/src/CodeFormer /content/gdrive/MyDrive/sd/stable-diffusion/src/codeformer')
-    get_ipython().system('git clone https://github.com/xinntao/Real-ESRGAN')
-    get_ipython().system('mv  /content/gdrive/MyDrive/sd/stable-diffusion/src/Real-ESRGAN/ /content/gdrive/MyDrive/sd/stable-diffusion/src/realesrgan')
-    get_ipython().system('git clone https://github.com/crowsonkb/k-diffusion.git')
-    get_ipython().system('cp -r /content/gdrive/MyDrive/sd/stable-diffusion/src/k-diffusion/k_diffusion /content/gdrive/MyDrive/sd/stable-diffusion-webui')
-    get_ipython().system('git clone https://github.com/Hafiidz/latent-diffusion')
-    get_ipython().system('cp -r  /content/gdrive/MyDrive/sd/stable-diffusion/ldm /content/gdrive/MyDrive/sd/stable-diffusion-webui/')
-
-
-with capture.capture_output() as cap:
-  if not os.path.exists('/usr/local/lib/python3.7/dist-packages/gradio-3.4b3.dist-info'):
-    get_ipython().run_line_magic('cd', '/content/')
-    get_ipython().system('wget https://github.com/TheLastBen/fast-stable-diffusion/raw/main/Dependencies/Dependencies_AUT.1')
-    get_ipython().system('wget https://github.com/TheLastBen/fast-stable-diffusion/raw/main/Dependencies/Dependencies_AUT.2')
-    get_ipython().run_line_magic('mv', 'Dependencies_AUT.1 Dependencies_AUT.7z.001')
-    get_ipython().run_line_magic('mv', 'Dependencies_AUT.2 Dependencies_AUT.7z.002')
-    get_ipython().system('7z x Dependencies_AUT.7z.001')
-    time.sleep(2)
-    get_ipython().system('rm -r /content/usr/local/lib/python3.7/dist-packages/transformers')
-    get_ipython().system('rm -r /content/usr/local/lib/python3.7/dist-packages/transformers-4.19.2.dist-info')
-    get_ipython().system('rm -r /content/usr/local/lib/python3.7/dist-packages/diffusers')
-    get_ipython().system('rm -r /content/usr/local/lib/python3.7/dist-packages/diffusers-0.3.0.dist-info')
-    get_ipython().system('rm -r /content/usr/local/lib/python3.7/dist-packages/accelerate')
-    get_ipython().system('rm -r /content/usr/local/lib/python3.7/dist-packages/accelerate-0.12.0.dist-info')
-    get_ipython().system('cp -r /content/usr/local/lib/python3.7/dist-packages /usr/local/lib/python3.7/')
-    get_ipython().system('rm -r /content/usr')
-    get_ipython().system('rm Dependencies_AUT.7z.001')
-    get_ipython().system('rm Dependencies_AUT.7z.002')
-
-
-with capture.capture_output() as cap:
-  get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui/modules')
-  get_ipython().system('wget -O paths.py https://raw.githubusercontent.com/TheLastBen/fast-stable-diffusion/main/AUTOMATIC1111_files/paths.py')
-  if not os.path.exists('/tools/node/bin/lt'):
-    get_ipython().system('npm install -g localtunnel')
-
-with capture.capture_output() as cap: 
-  get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui/')
-  time.sleep(1)
-  get_ipython().system('wget -O webui.py https://raw.githubusercontent.com/AUTOMATIC1111/stable-diffusion-webui/master/webui.py')
-  get_ipython().system("sed -i 's@gpu_call).*@gpu_call) \\n        demo.queue(concurrency_count=111500)@' /content/gdrive/MyDrive/sd/stable-diffusion-webui/webui.py")
-  get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui/modules/')
-  get_ipython().system('wget -O ui.py https://raw.githubusercontent.com/AUTOMATIC1111/stable-diffusion-webui/master/modules/ui.py')
-  get_ipython().system('sed -i \'s@css = "".*@with open(os.path.join(script_path, "style.css"), "r", encoding="utf8") as file:\\n        css = file.read()@\' /content/gdrive/MyDrive/sd/stable-diffusion-webui/modules/ui.py')
-  get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui')
-  get_ipython().system('wget -O style.css https://raw.githubusercontent.com/AUTOMATIC1111/stable-diffusion-webui/master/style.css')
-  get_ipython().system("sed -i 's@min-height: 4.*@min-height: 5.5em;@g' /content/gdrive/MyDrive/sd/stable-diffusion-webui/style.css")
-  get_ipython().run_line_magic('cd', '/content')
-
-
-Use_Gradio_Server = False #@param {type:"boolean"}
-#@markdown  - Only if you have trouble connecting to the local server
-
-
-share=''
-if Use_Gradio_Server:
-  share='--share'
-  for line in fileinput.input('/opt/conda/envs/pytorch/lib/python3.9/site-packages/gradio/blocks.py', inplace=True):
-    if line.strip().startswith('self.server_name ='):
-        line = '            self.server_name = server_name\n'
-    if line.strip().startswith('self.server_port ='):
-        line = '            self.server_port = server_port\n'
-    if line.strip().startswith('self.protocol = "https"'):
-        line = '            self.protocol = "https" if self.local_url.startswith("https") else "http"\n'
-    sys.stdout.write(line)
-  clear_output()
-  
-else:
-  share=''
-  get_ipython().system('nohup lt --port 7860 > srv.txt 2>&1 &')
-  time.sleep(2)
-  get_ipython().system("grep -o 'https[^ ]*' /content/srv.txt >srvr.txt")
-  time.sleep(2)
-  srv= getoutput('cat /content/srvr.txt')
-
-  for line in fileinput.input('/opt/conda/envs/pytorch/lib/python3.9/site-packages/gradio/blocks.py', inplace=True):
-    if line.strip().startswith('self.server_name ='):
-        line = f'            self.server_name = "{srv[8:]}"\n'
-    if line.strip().startswith('self.server_port ='):
-        line = '            self.server_port = 443\n'
-    if line.strip().startswith('self.protocol = "https"'):
-        line = '            self.protocol = "https"\n'
-    sys.stdout.write(line)
-
-  get_ipython().system('sed -i \'13s@.*@    "PUBLIC_SHARE_TRUE": "\x1b[32mConnected",@\' /opt/conda/envs/pytorch/lib/python3.9/site-packages/gradio/strings.py')
-  
-  get_ipython().system('rm /content/srv.txt')
-  get_ipython().system('rm /content/srvr.txt')
-  clear_output()
-
-with capture.capture_output() as cap:
-  get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion/')
-
-if os.path.isfile(path_to_trained_model):
-  get_ipython().system('python /content/gdrive/MyDrive/sd/stable-diffusion-webui/webui.py $share --disable-safe-unpickle --ckpt "$path_to_trained_model"')
-else:
-  get_ipython().system('python /content/gdrive/MyDrive/sd/stable-diffusion-webui/webui.py $share --disable-safe-unpickle --ckpt-dir "$path_to_trained_model"')
 
 
 
