@@ -37,13 +37,22 @@ parser = argparse.ArgumentParser(description="Dreambooth training script.")
 parser.add_argument(
     "--session",
     type=str,
-    help="the session name for dreambooth train + inference"
+    help="the session name for dreambooth train + inference",
+    required=True
 )
 
 parser.add_argument(
     "--s3images",
     type=str,
     help="the array of images for dreambooth to train"
+)
+
+parser.add_argument(
+    "--gender",
+    type=str,
+    choices=['Male','Female', 'No','Both'],
+    help="gender of input images",
+    required=True
 )
 
 opt = parser.parse_args()
@@ -54,6 +63,8 @@ S3_image_list = json.loads(opt.s3images)
 Training_Steps=len(S3_image_list) * 100   #2700 #@param{type: 'number'}
 
 Session_Name=Session_Name.replace(" ","_")
+
+Contains_faces = opt.gender #@param ["No", "Female", "Male", "Both"]
 
 
 Session_Link_optional = "" #@param{type: 'string'}
@@ -88,7 +99,6 @@ INSTANCE_DIR=SESSION_DIR+'/instance_images'
 MDLPTH=str(SESSION_DIR+"/"+Session_Name+'.ckpt')
 CLASS_DIR=SESSION_DIR+'/Regularization_images'
 
-Contains_faces = "Both" #@param ["No", "Female", "Male", "Both"]
 
 def reg():
   with capture.capture_output() as cap:
@@ -296,7 +306,7 @@ else:
   precision=prec
 
 try:
-   resume
+   resume = false
    if resume and not Resume_Training:
      print('[1;31mOverwrite your previously trained model ?, answering "yes" will train a new model, answering "no" will resume the training of the previous model?  yes or no ?[0m')
      while True:
@@ -333,7 +343,7 @@ Enable_text_encoder_training= True #@param{type: 'boolean'}
 #@markdown - For example you can devide 5%, 5%, 5% on 3 training runs on the model, or 0%, 0%, 15%, given that 15% will cover the total training steps count (15% of 200 steps is not enough).
 
 #@markdown - Enter the % of the total steps for which to train the text_encoder
-Train_text_encoder_for=35 #@param{type: 'number'}
+Train_text_encoder_for=100 #@param{type: 'number'}
 
 #@markdown - Keep the % low for better style transfer, more training steps will be necessary for good results.
 #@markdown - Higher % will give more weight to the instance, it gives stronger results at lower steps count, but harder to stylize, 
@@ -380,17 +390,17 @@ if Captionned_instance_images:
 
 def txtenc_train(Caption, stpsv, stp, MODELT_NAME, INSTANCE_DIR, CLASS_DIR, OUTPUT_DIR, PT, Seed, precision, Training_Steps):
   print('[1;33mTraining the text encoder with regularization using the model (' + MODEL_NAME + ')...[0m')
-  get_ipython().system('accelerate launch /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption      --train_text_encoder      --dump_only_text_encoder      --pretrained_model_name_or_path="$MODEL_NAME"      --instance_data_dir="$INSTANCE_DIR"      --class_data_dir="$CLASS_DIR"      --output_dir="$OUTPUT_DIR"      --with_prior_preservation --prior_loss_weight=1.0      --instance_prompt="$PT" --class_prompt="$CPT"    --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=1      --gradient_accumulation_steps=1 --gradient_checkpointing      --use_8bit_adam      --learning_rate=2e-6      --lr_scheduler="polynomial"      --lr_warmup_steps=0      --max_train_steps=$Training_Steps      --num_class_images=200')
+  get_ipython().system('accelerate launch /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption      --train_text_encoder         --pretrained_model_name_or_path="$MODEL_NAME"      --instance_data_dir="$INSTANCE_DIR"      --class_data_dir="$CLASS_DIR"      --output_dir="$OUTPUT_DIR"      --with_prior_preservation --prior_loss_weight=1.0      --instance_prompt="$PT" --class_prompt="$CPT"    --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=2      --gradient_accumulation_steps=1 --gradient_checkpointing      --use_8bit_adam      --learning_rate=2e-6      --lr_scheduler="polynomial"      --lr_warmup_steps=0      --max_train_steps=$Training_Steps      --num_class_images=200')
 
 def unet_train(Caption, SESSION_DIR, stpsv, stp, MODELT_NAME, INSTANCE_DIR, OUTPUT_DIR, PT, Seed, precision, Training_Steps):
   clear_output()
   print('[1;33mTraining the unet using the model (' + MODELT_NAME + ')...[0m')
-  get_ipython().system('accelerate launch /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption      --train_only_unet     --pretrained_model_name_or_path="$MODELT_NAME"      --instance_data_dir="$INSTANCE_DIR"      --output_dir="$OUTPUT_DIR"      --instance_prompt="$PT"      --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=1      --gradient_accumulation_steps=1      --use_8bit_adam      --learning_rate=2e-6      --lr_scheduler="polynomial"      --lr_warmup_steps=0      --max_train_steps=$Training_Steps')
+  get_ipython().system('accelerate launch /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption      --train_only_unet     --pretrained_model_name_or_path="$MODELT_NAME"      --instance_data_dir="$INSTANCE_DIR"      --output_dir="$OUTPUT_DIR"      --instance_prompt="$PT"      --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=1      --gradient_accumulation_steps=1    --use_8bit_adam      --learning_rate=2e-6      --lr_scheduler="polynomial"      --lr_warmup_steps=0      --max_train_steps=$Training_Steps')
 
 if Contains_faces!="No":
   
   txtenc_train(Caption, stpsv, stp, MODELT_NAME, INSTANCE_DIR, CLASS_DIR, OUTPUT_DIR, PT, Seed, precision, Training_Steps=stptxt)
-  unet_train(Caption, SESSION_DIR, stpsv, stp, MODELT_NAME, INSTANCE_DIR, OUTPUT_DIR, PT, Seed, precision, Training_Steps)
+  #unet_train(Caption, SESSION_DIR, stpsv, stp, MODELT_NAME, INSTANCE_DIR, OUTPUT_DIR, PT, Seed, precision, Training_Steps)
 
 else:
   get_ipython().system('accelerate launch /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption      $Textenc      --save_starting_step=$stpsv      --stop_text_encoder_training=$stptxt      --save_n_steps=$stp      --Session_dir=$SESSION_DIR      --pretrained_model_name_or_path="$MODELT_NAME"      --instance_data_dir="$INSTANCE_DIR"      --output_dir="$OUTPUT_DIR"      --instance_prompt="$PT"      --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=1      --gradient_accumulation_steps=1      --use_8bit_adam      --learning_rate=2e-6      --lr_scheduler="polynomial"      --lr_warmup_steps=0      --max_train_steps=$Training_Steps')

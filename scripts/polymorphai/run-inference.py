@@ -7,6 +7,7 @@ from IPython.display import clear_output
 from IPython.utils import capture
 import wget
 import time
+import uuid
 
 import fileinput
 from subprocess import getoutput
@@ -40,16 +41,13 @@ INSTANCET=INSTANCET.replace(" ","_")
 path_to_trained_model=SESSION_DIR+"/"+INSTANCET+'.ckpt'
 
 # clean output dir
-get_ipython().system('rm -r $INF_OUTPUT_DIR')
-
-prompt='photo of user_xyz person working out in a gym'
-
+get_ipython().system('rm -rf $INF_OUTPUT_DIR')
 
 def run_inference(prompt, output_dir, path_to_trained_model):
   with capture.capture_output() as cap:
     get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion/')
   
-  get_ipython().system('python scripts/txt2img.py --prompt "$prompt" --outdir "$output_dir" --ddim_steps 50 --scale 15  --H 512 --W 512 --n_samples 5 --seed 332 --ckpt "$path_to_trained_model"')
+    get_ipython().system('python scripts/txt2img.py --prompt "$prompt" --seed 332 --outdir "$output_dir" --ddim_steps 60 --scale 15  --H 512 --W 512 --n_samples 1 --n_iter 1 --skip_grid --ckpt "$path_to_trained_model"')
 
 def upload_to_s3(session_name, output_dir):
   s3 = boto3.client('s3')
@@ -59,5 +57,21 @@ def upload_to_s3(session_name, output_dir):
     s3key = session_name + "/output/" + image_file
     s3.upload_file(output_dir + '/' + image_file, "polymorph-ai", s3key)  
 
-run_inference(prompt, INF_OUTPUT_DIR, path_to_trained_model)
+#prompt='photo of user_xyz person working out in a gym'
+#prompt='Centered fine studio photograph of a user_xyz wearing only a futuristic mecha mayan helmet with bright lights, chest and face, ultra-realistic, white background, 8k hdr, shallow depth of field, intricate'
+
+prompt_instance = 'user_xyz'
+
+f = open("prompts.txt","r")
+lines = f.readlines()
+
+for line in lines:
+    prompt = line.replace("<instance>",prompt_instance)
+    run_inference(prompt, INF_OUTPUT_DIR, path_to_trained_model)
+    output_file_path = INF_OUTPUT_DIR + "/samples/00000.png"
+    new_file_path = INF_OUTPUT_DIR + "/" + str(uuid.uuid4()) + ".png"
+
+    get_ipython().system("cp " + output_file_path + " " + new_file_path)
+
+
 upload_to_s3(Session_Name, INF_OUTPUT_DIR)
