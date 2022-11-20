@@ -43,11 +43,11 @@ path_to_trained_model=SESSION_DIR+"/"+INSTANCET+'.ckpt'
 # clean output dir
 get_ipython().system('rm -rf $INF_OUTPUT_DIR')
 
-def run_inference(prompt, output_dir, path_to_trained_model):
+def run_inference(prompt, output_dir, path_to_trained_model, ddim_steps, cfg_scale):
   with capture.capture_output() as cap:
     get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion/')
   
-    get_ipython().system('python scripts/txt2img.py --prompt "$prompt" --seed 332 --outdir "$output_dir" --ddim_steps 60 --scale 15  --H 512 --W 512 --n_samples 1 --n_iter 1 --skip_grid --ckpt "$path_to_trained_model"')
+    get_ipython().system('python scripts/txt2img.py --prompt "$prompt" --seed 332 --outdir "$output_dir" --ddim_steps "$ddim_steps" --scale "$cfg_scale"  --H 512 --W 512 --n_samples 1 --n_iter 3 --skip_grid --ckpt "$path_to_trained_model"')
 
 def upload_to_s3(session_name, output_dir):
   s3 = boto3.client('s3')
@@ -62,16 +62,24 @@ def upload_to_s3(session_name, output_dir):
 
 prompt_instance = 'user_xyz'
 
+ddim_configs = [10,25,40,60]
+scale_configs = [4,6,8,10,15]
+
 f = open("prompts.txt","r")
 lines = f.readlines()
+f.close()
 
-for line in lines:
-    prompt = line.replace("<instance>",prompt_instance)
-    run_inference(prompt, INF_OUTPUT_DIR, path_to_trained_model)
-    output_file_path = INF_OUTPUT_DIR + "/samples/00000.png"
-    new_file_path = INF_OUTPUT_DIR + "/" + str(uuid.uuid4()) + ".png"
+for steps in ddim_configs:
+  for scale in scale_configs:
+    outdir = INF_OUTPUT_DIR + '/' + str(steps) + '_ddim_' + str(scale) + '_scale'
 
-    get_ipython().system("cp " + output_file_path + " " + new_file_path)
+    for line in lines:
+      prompt = line.replace("<instance>",prompt_instance)
+      run_inference(prompt, outdir, path_to_trained_model, steps, scale)
+      output_file_path = outdir + "/samples/00000.png"
+      new_file_path = outdir + "/" + str(uuid.uuid4()) + ".png"
 
+      get_ipython().system("cp " + output_file_path + " " + new_file_path)
 
-upload_to_s3(Session_Name, INF_OUTPUT_DIR)
+    #upload_to_s3(Session_Name, INF_OUTPUT_DIR)
+
