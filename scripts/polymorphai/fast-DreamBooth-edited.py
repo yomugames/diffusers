@@ -19,6 +19,7 @@ from IPython.utils import capture
 import requests
 import time
 import json
+import boto3
 
 #@markdown #Create/Load a Session
 
@@ -422,6 +423,13 @@ if os.path.exists('/content/models/'+INSTANCE_NAME+'/unet/diffusion_pytorch_mode
     if not os.path.exists(str(SESSION_DIR+'/tokenizer')):
       get_ipython().system('cp -R \'/content/models/\'$INSTANCE_NAME\'/tokenizer\' "$SESSION_DIR"')
     print("[1;32mDONE, the CKPT model is in your Gdrive in the sessions folder")
+
+    #upload model to s3
+    s3 = boto3.client('s3')
+    s3key = "inputs/" + INSTANCE_NAME + "/" + INSTANCE_NAME + ".ckpt"
+    s3.upload_file(MDLPTH, "polymorph-ai", s3key)
+    print("Uploaded the CKPT model to S3")
+
   else:
     print("[1;31mSomething went wrong")
     
