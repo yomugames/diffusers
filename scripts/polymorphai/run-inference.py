@@ -72,7 +72,7 @@ def upload_to_s3(session_name, output_dir):
   # upload individual
   files = os.listdir(output_dir)
   image_files = [f for f in files if os.path.isfile(output_dir+'/'+f) and f.endswith(".png")]
-  #or image_file in image_files:
+  for image_file in image_files:
     s3key = "results/" + session_name + "/" + image_file
     s3.upload_file(output_dir + '/' + image_file, "polymorph-ai", s3key)  
 
