@@ -193,7 +193,7 @@ with capture.capture_output() as cap:
     get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/')
     get_ipython().run_line_magic('mkdir', 'sd')
     get_ipython().run_line_magic('cd', 'sd')
-    get_ipython().system('git clone https://github.com/CompVis/stable-diffusion')
+    get_ipython().system('git clone https://github.com/yomugames/stable-diffusion.git')
     get_ipython().system('git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui')
     get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion-webui/')
     get_ipython().system('mkdir -p cache/{huggingface,torch}')
