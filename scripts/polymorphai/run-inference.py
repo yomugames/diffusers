@@ -26,6 +26,12 @@ parser.add_argument(
     help="the session name for dreambooth train + inference"
 )
 
+parser.add_argument(
+    "--gender",
+    type=str,
+    help="the gender of subject"
+)
+
 opt = parser.parse_args()
 
 Session_Name = opt.session #@param{type: 'string'}
@@ -43,11 +49,11 @@ path_to_trained_model=SESSION_DIR+"/"+INSTANCET+'.ckpt'
 # clean output dir
 get_ipython().system('rm -rf $INF_OUTPUT_DIR')
 
-def run_inference(prompt, output_dir, path_to_trained_model, ddim_steps, cfg_scale):
+def run_inference(prompt, negative_prompt, output_dir, path_to_trained_model, ddim_steps, cfg_scale):
   with capture.capture_output() as cap:
     get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion/')
   
-    get_ipython().system('python scripts/txt2img.py --prompt "$prompt" --seed 332 --outdir "$output_dir" --ddim_steps "$ddim_steps" --scale "$cfg_scale"  --H 512 --W 512 --n_samples 1 --n_iter 3 --skip_grid --ckpt "$path_to_trained_model"')
+    get_ipython().system('python scripts/txt2img.py --prompt "$prompt" --negative_prompt "$negative_prompt" --seed 332 --outdir "$output_dir" --ddim_steps "$ddim_steps" --scale "$cfg_scale"  --H 512 --W 512 --n_samples 1 --n_iter 3 --skip_grid --ckpt "$path_to_trained_model"')
 
 def rename_files(output_dir):
   files = os.listdir(output_dir)
@@ -66,7 +72,7 @@ def upload_to_s3(session_name, output_dir):
   # upload individual
   files = os.listdir(output_dir)
   image_files = [f for f in files if os.path.isfile(output_dir+'/'+f) and f.endswith(".png")]
-  for image_file in image_files:
+  #or image_file in image_files:
     s3key = "results/" + session_name + "/" + image_file
     s3.upload_file(output_dir + '/' + image_file, "polymorph-ai", s3key)  
 
@@ -90,15 +96,27 @@ f = open("prompts.txt","r")
 lines = f.readlines()
 f.close()
 
-for steps in ddim_configs:
-  for scale in scale_configs:
-    outdir = INF_OUTPUT_DIR + '/' + str(steps) + '_ddim_' + str(scale) + '_scale'
+outdir = INF_OUTPUT_DIR 
 
-    for line in lines:
-      prompt = line.replace("<instance>",prompt_instance)
-      run_inference(prompt, outdir, path_to_trained_model, steps, scale)
+steps = 50
+scale = 15 
 
-    samples_outdir = outdir + "/samples" 
-    rename_files(samples_outdir)
-    upload_to_s3(Session_Name, samples_outdir)
+negative_prompt = "bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
+
+if opt.gender == "Male":
+  negative_prompt += ", female"
+elif opt.gender == "Female":
+  negative_prompt += ", male"
+
+#for steps in ddim_configs:
+#  for scale in scale_configs:
+#    outdir = INF_OUTPUT_DIR + '/' + str(steps) + '_ddim_' + str(scale) + '_scale'
+
+for line in lines:
+  prompt = line.replace("<instance>",prompt_instance)
+  run_inference(prompt, negative_prompt, outdir, path_to_trained_model, steps, scale)
+
+samples_outdir = outdir + "/samples" 
+rename_files(samples_outdir)
+upload_to_s3(Session_Name, samples_outdir)
 
