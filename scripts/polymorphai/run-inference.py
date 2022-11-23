@@ -98,8 +98,8 @@ f.close()
 
 outdir = INF_OUTPUT_DIR 
 
-steps = 50
-scale = 15 
+steps = 25
+scale = 6
 
 negative_prompt = "bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
 
