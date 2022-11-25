@@ -427,7 +427,7 @@ if os.path.exists('/content/models/'+INSTANCE_NAME+'/unet/diffusion_pytorch_mode
     #upload model to s3
     s3 = boto3.client('s3')
     s3key = "inputs/" + INSTANCE_NAME + "/" + INSTANCE_NAME + ".ckpt"
-    s3.upload_file(MDLPTH, "polymorph-ai", s3key)
+    s3.upload_file(MDLPTH, "polymorph-ai", s3key, ExtraArgs={'ACL': 'private'})
     print("Uploaded the CKPT model to S3")
 
   else:
