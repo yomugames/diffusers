@@ -174,7 +174,7 @@ if Contains_faces == "Both":
 # In[ ]:
 
 import shutil
-from PIL import Image
+from PIL import Image, ImageOps
 
 #@markdown #Instance Images
 #@markdown ----
@@ -230,6 +230,7 @@ def prepare_images():
           identifier=filename.split(".")[0]
           new_path_with_file = os.path.join(IMAGES_FOLDER_OPTIONAL, filename)
           file = Image.open(new_path_with_file)
+          file = ImageOps.exif_transpose(file) #prevents accidental image rotation
           width, height = file.size
           side_length = min(width, height)
           left = (width - side_length)/2
