@@ -5,7 +5,6 @@ import os
 import sys
 from IPython.display import clear_output
 from IPython.utils import capture
-import wget
 import time
 
 import fileinput

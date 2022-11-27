@@ -5,7 +5,6 @@ import os
 import sys
 from IPython.display import clear_output
 from IPython.utils import capture
-import wget
 import time
 import uuid
 
@@ -87,7 +86,8 @@ def upload_to_s3(session_name, output_dir):
 #prompt='photo of user_xyz person working out in a gym'
 #prompt='Centered fine studio photograph of a user_xyz wearing only a futuristic mecha mayan helmet with bright lights, chest and face, ultra-realistic, white background, 8k hdr, shallow depth of field, intricate'
 
-prompt_instance = 'user_xyz'
+prompt_instance = 'user_xyz person'
+
 
 ddim_configs = [10,25,40,60]
 scale_configs = [4,6,8,10,15]
@@ -99,7 +99,7 @@ f.close()
 outdir = INF_OUTPUT_DIR 
 
 steps = 25
-scale = 6
+scale = 7
 
 negative_prompt = "bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
 

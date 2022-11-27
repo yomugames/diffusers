@@ -61,7 +61,7 @@ opt = parser.parse_args()
 Session_Name = opt.session #@param{type: 'string'}
 S3_image_list = json.loads(opt.s3images)
 
-Training_Steps=len(S3_image_list) * 100   #2700 #@param{type: 'number'}
+Training_Steps=len(S3_image_list) * 150   #2700 #@param{type: 'number'}
 Lr_warmup_steps = 0 # int(Training_Steps / 10)
 Seed='332' #@param{type: 'string'}
 
@@ -392,8 +392,10 @@ if Captionned_instance_images:
 
 
 def txtenc_train(Caption, stpsv, stp, MODELT_NAME, INSTANCE_DIR, CLASS_DIR, OUTPUT_DIR, PT, Seed, precision, Training_Steps):
+  _, _, files = next(os.walk(CLASS_DIR))
+  class_count = len(files)
   print('[1;33mTraining the text encoder with regularization using the model (' + MODEL_NAME + ')...[0m')
-  get_ipython().system('accelerate launch --num_cpu_threads_per_process 4 /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption    --train_text_encoder         --pretrained_model_name_or_path="$MODEL_NAME"  --instance_data_dir="$INSTANCE_DIR"      --class_data_dir="$CLASS_DIR"      --output_dir="$OUTPUT_DIR"      --with_prior_preservation --prior_loss_weight=1.0      --instance_prompt="$PT" --class_prompt="$CPT"    --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=2      --gradient_accumulation_steps=1 --gradient_checkpointing      --use_8bit_adam      --learning_rate=3e-6      --lr_scheduler="polynomial"      --lr_warmup_steps="$Lr_warmup_steps"      --max_train_steps=$Training_Steps      --num_class_images=200')
+  get_ipython().system('accelerate launch --num_cpu_threads_per_process 4 /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption    --train_text_encoder         --pretrained_model_name_or_path="$MODEL_NAME"  --instance_data_dir="$INSTANCE_DIR"      --class_data_dir="$CLASS_DIR"      --output_dir="$OUTPUT_DIR"      --with_prior_preservation --prior_loss_weight=1.0      --instance_prompt="$PT" --class_prompt="$CPT"    --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=1      --gradient_accumulation_steps=1 --gradient_checkpointing      --use_8bit_adam      --learning_rate=1e-6      --lr_scheduler="constant"      --lr_warmup_steps="$Lr_warmup_steps"      --max_train_steps=$Training_Steps      --num_class_images=$class_count')
 
 def unet_train(Caption, SESSION_DIR, stpsv, stp, MODELT_NAME, INSTANCE_DIR, OUTPUT_DIR, PT, Seed, precision, Training_Steps):
   clear_output()
