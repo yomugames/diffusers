@@ -20,6 +20,10 @@ import requests
 import time
 import json
 import boto3
+import numpy as np
+import face_recognition
+import math
+
 
 #@markdown #Create/Load a Session
 
@@ -197,7 +201,71 @@ def download_images(s3_image_list, dest_dir):
     r = requests.get(url, allow_redirects=True)
 
     open(dest_dir + '/' + filename, 'wb').write(r.content)
-  
+
+def get_face_center(file):
+    image = file.convert('RGB')
+    np_image_file = np.array(image)
+    face_locations = face_recognition.face_locations(np_image_file)
+    print(face_locations)
+    if not face_locations:
+        return [256, 256]
+
+    top, right, bottom, left =  face_locations[0]
+    y = (bottom + top) / 2
+    x = (left + right) / 2
+    return [x, y]
+
+def min_fit_resize(file, Crop_size):
+    width, height = file.size
+    min_side_length = min(width, height)
+
+    new_resized_height = 0
+    new_resized_width = 0
+
+    # min-fit resize
+    if min_side_length == width:
+        # width is smaller
+        scale = width / Crop_size
+        new_resized_width = Crop_size
+        new_resized_height = math.floor(height / scale)
+    else:
+        # height is smaller
+        scale = height / Crop_size
+        new_resized_height = Crop_size
+        new_resized_width = math.floor(width / scale)
+
+    file = file.resize((new_resized_width, new_resized_height))
+    return [file, new_resized_width, new_resized_height]
+
+def crop_center(file, facex, facey, new_resized_width, new_resized_height, Crop_size):
+    # if facex centering exceed left, anchor left side
+    # if facex centering exceeds right, anchor right side
+    # else, anchor center
+    if facex - (Crop_size / 2) < 0:
+        left = 0
+        right = Crop_size
+    elif facex + (Crop_size / 2) > new_resized_width:
+        right = new_resized_width
+        left = new_resized_width - Crop_size
+    else:
+        left = facex - (Crop_size / 2)
+        right = facex + (Crop_size / 2)
+
+    # if facey centering exceed top, anchor top side
+    # if facey centering exceeds bottom, anchor bottom side
+    # else, anchor center
+    if facey - (Crop_size / 2) < 0:
+        top = 0
+        bottom = Crop_size
+    elif facey + (Crop_size / 2) > new_resized_height:
+        bottom = new_resized_height
+        top = new_resized_height - Crop_size
+    else:
+        top = facey - (Crop_size / 2)
+        bottom = facey + (Crop_size / 2)
+
+    return file.crop((left, top, right, bottom))
+
 
 # get images of faces somewhere, then copy it to instance dir
 def prepare_images():
@@ -231,18 +299,14 @@ def prepare_images():
           new_path_with_file = os.path.join(IMAGES_FOLDER_OPTIONAL, filename)
           file = Image.open(new_path_with_file)
           file = ImageOps.exif_transpose(file) #prevents accidental image rotation
-          width, height = file.size
-          side_length = min(width, height)
-          left = (width - side_length)/2
-          top = (height - side_length)/2
-          right = (width + side_length)/2
-          bottom = (height + side_length)/2
-          image = file.crop((left, top, right, bottom))
-          image = image.resize((Crop_size, Crop_size))
+          file, new_resized_width, new_resized_height = min_fit_resize(file, Crop_size)
+          facex, facey = get_face_center(file)
+          file = crop_center(file, facex, facey, new_resized_width, new_resized_height, Crop_size)
+
           if (extension.upper() == "JPG"):
-              image.save(new_path_with_file, format="JPEG", quality = 100)
+              file.save(new_path_with_file, format="JPEG", quality = 100)
           else:
-              image.save(new_path_with_file, format=extension.upper())
+              file.save(new_path_with_file, format=extension.upper())
           get_ipython().run_line_magic('cp', '-r "$IMAGES_FOLDER_OPTIONAL/." "$INSTANCE_DIR"')
           clear_output()      
       else:
