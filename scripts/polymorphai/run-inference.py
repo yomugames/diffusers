@@ -115,6 +115,7 @@ scale_configs = [4,6,8,10,15]
 
 f = open("prompts.txt","r")
 prompts = list(filter(None, f.read().splitlines()))
+prompts = list(map(lambda prompt : prompt.replace("<instance>",prompt_instance) , prompts))
 f.close()
 
 outdir = INF_OUTPUT_DIR 
@@ -135,8 +136,9 @@ elif opt.gender == "Female":
 #  for scale in scale_configs:
 #    outdir = INF_OUTPUT_DIR + '/' + str(steps) + '_ddim_' + str(scale) + '_scale'
 
-for line in prompts:
-  prompt = line.replace("<instance>",prompt_instance)
+for prompt in prompts:
+  # remove prompt label
+  prompt = re.sub(r"^.*?@","",prompt) 
   run_inference(prompt, negative_prompt, outdir, path_to_trained_model, steps, scale, n_iter, seed)
 
 samples_outdir = outdir + "/samples" 
