@@ -17,6 +17,7 @@ import random
 
 import argparse
 import boto3
+import re
 
 
 parser = argparse.ArgumentParser(description="Dreambooth test script.")
@@ -122,7 +123,7 @@ outdir = INF_OUTPUT_DIR
 
 steps = 25
 scale = 7
-n_iter = 3
+n_iter = 4
 seed = 332
 
 negative_prompt = "bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
