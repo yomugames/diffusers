@@ -14,11 +14,18 @@ import fileinput
 from subprocess import getoutput
 from IPython.display import HTML
 import random
+import subprocess
+import signal
 
 import argparse
 import boto3
 import re
-
+import requests
+import io
+import base64
+from PIL import Image
+import socket
+from contextlib import closing
 
 parser = argparse.ArgumentParser(description="Dreambooth test script.")
 
@@ -41,7 +48,7 @@ Session_Name = opt.session #@param{type: 'string'}
 Session_Name=Session_Name.replace(" ","_")
 WORKSPACE='/content/gdrive/MyDrive/Fast-Dreambooth'
 SESSION_DIR=WORKSPACE+'/Sessions/'+Session_Name
-INF_OUTPUT_DIR=SESSION_DIR+'/output'
+INF_OUTPUT_DIR=SESSION_DIR+'/output/'
 
 INSTANCET=Session_Name
 INSTANCET=INSTANCET.replace(" ","_")
@@ -51,11 +58,49 @@ path_to_trained_model=SESSION_DIR+"/"+INSTANCET+'.ckpt'
 # clean output dir
 get_ipython().system('rm -rf $INF_OUTPUT_DIR')
 
+webui_host = '127.0.0.1'
+webui_port = 7860
+automatic_web_url = f'http://{webui_host}:{webui_port}'
+webui_proc = ""
+
+image_count = 1
+
+def setup_automatic1111():
+  global webui_proc
+  webui_cmd = f'~/stable-diffusion-webui/webui.sh  --disable-safe-unpickle --share --ckpt {path_to_trained_model} --api --port {webui_port} > ~/stable-diffusion-webui/webui.log'
+  webui_proc = subprocess.Popen(webui_cmd, shell=True, stdin=subprocess.PIPE, preexec_fn=os.setsid)
+  print("setup:" + str(webui_proc))
+
+def kill_automatic1111():
+  print("destroy:" + str(webui_proc))
+  os.killpg(os.getpgid(webui_proc.pid), signal.SIGTERM)  # Send the signal to all the process groups
+
+
+def is_socket_open(host, port):
+  with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+    return sock.connect_ex((host, port)) == 0
+
 def run_inference(prompt, negative_prompt, output_dir, path_to_trained_model, ddim_steps, cfg_scale, n_iter, seed):
+  global image_count
   with capture.capture_output() as cap:
-    get_ipython().run_line_magic('cd', '/content/gdrive/MyDrive/sd/stable-diffusion/')
-  
-    get_ipython().system('python scripts/txt2img.py --prompt "$prompt" --negative_prompt "$negative_prompt" --seed $seed --outdir "$output_dir" --ddim_steps "$ddim_steps" --scale "$cfg_scale"  --H 512 --W 512 --n_samples 1 --n_iter $n_iter --skip_grid --ckpt "$path_to_trained_model"')
+    payload = {
+      "prompt": prompt,
+      "negative_prompt": negative_prompt,
+      "steps": ddim_steps,
+      "cfg_scale": cfg_scale,
+      "sampler_index": "DDIM",
+      "seed": seed,
+      "width": 512,
+      "height": 512,
+      "n_iter": n_iter,
+      "restore_faces": True
+    }
+    response = requests.post(url=f'{automatic_web_url}/sdapi/v1/txt2img', json=payload)
+    json_response = response.json()
+    for i in json_response['images']:
+      image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
+      image.save(output_dir + '/' + str(image_count) + '.png')
+      image_count += 1
 
 def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, seed):
   files = os.listdir(output_dir)
@@ -126,23 +171,42 @@ scale = 7
 n_iter = 4
 seed = 332
 
-negative_prompt = "bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
+#negative_prompt = "bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
+
 
 if opt.gender == "Male":
-  negative_prompt += ", female"
+  negative_prompt = "female"
 elif opt.gender == "Female":
-  negative_prompt += ", male"
+  negative_prompt = ", male"
 
 #for steps in ddim_configs:
 #  for scale in scale_configs:
 #    outdir = INF_OUTPUT_DIR + '/' + str(steps) + '_ddim_' + str(scale) + '_scale'
 
-for prompt in prompts:
+samples_outdir = outdir + "/samples" 
+os.makedirs(samples_outdir)
+
+if is_socket_open(webui_host, webui_port):
+  print(f"Cannot run program because another program is listening to {webui_port}")
+  sys.exit()
+
+setup_automatic1111()
+
+while(not is_socket_open(webui_host, webui_port)):
+    print("Webui not ready yet, sleeping for 3 secs...")
+    time.sleep(3)
+
+print("Sleep another 5 secs to make sure it's ready")
+time.sleep(5)
+
+for line in lines:
   # remove prompt label
   prompt = re.sub(r"^.*?@","",prompt) 
-  run_inference(prompt, negative_prompt, outdir, path_to_trained_model, steps, scale, n_iter, seed)
+  run_inference(prompt, negative_prompt, samples_outdir, path_to_trained_model, steps, scale, n_iter, seed)
 
-samples_outdir = outdir + "/samples" 
+kill_automatic1111()
+
 rename_files_and_write_metadata(samples_outdir, prompts, steps, scale, n_iter, seed)
+
 upload_to_s3(Session_Name, samples_outdir)
 
