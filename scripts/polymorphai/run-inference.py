@@ -67,7 +67,7 @@ image_count = 1
 
 def setup_automatic1111():
   global webui_proc
-  webui_cmd = f'~/stable-diffusion-webui/webui.sh  --disable-safe-unpickle --share --ckpt {path_to_trained_model} --api --port {webui_port} > ~/stable-diffusion-webui/webui.log'
+  webui_cmd = f'/content/stable-diffusion-webui/webui.sh  --disable-safe-unpickle --share --ckpt {path_to_trained_model} --api --port {webui_port} > /content/stable-diffusion-webui/webui.log 2>&1'
   webui_proc = subprocess.Popen(webui_cmd, shell=True, stdin=subprocess.PIPE, preexec_fn=os.setsid)
   print("setup:" + str(webui_proc))
 
