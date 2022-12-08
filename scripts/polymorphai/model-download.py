@@ -27,7 +27,7 @@ with capture.capture_output() as cap:
   get_ipython().run_line_magic('cd', '/content/')
 
 Update_repo = True #@param {type:"boolean"}
-Huggingface_Token = "" #@param {type:"string"}
+Huggingface_Token = os.environ.get('HUGGINGFACE_TOKEN') or ""
 token=Huggingface_Token
 
 #@markdown - Download the original v1.5 model.
