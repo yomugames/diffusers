@@ -162,9 +162,9 @@ elif not os.path.exists(str(SESSION_DIR)):
       print('[1;31mError downloading the model, make sure you have accepted the terms at https://huggingface.co/runwayml/stable-diffusion-v1-5')  
     
 if Contains_faces == "Female":
-  CLASS_DIR=CLASS_DIR+'/Women'
+  CLASS_DIR=CLASS_DIR+'/Mix'
 if Contains_faces == "Male":
-  CLASS_DIR=CLASS_DIR+'/Men'
+  CLASS_DIR=CLASS_DIR+'/Mix'
 if Contains_faces == "Both":
   CLASS_DIR=CLASS_DIR+'/Mix'
 
