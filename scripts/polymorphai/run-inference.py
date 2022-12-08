@@ -193,11 +193,11 @@ if is_socket_open(webui_host, webui_port):
 setup_automatic1111()
 
 while(not is_socket_open(webui_host, webui_port)):
-    print("Webui not ready yet, sleeping for 3 secs...")
-    time.sleep(3)
+    print("Webui not ready yet, sleeping for 5 secs...")
+    time.sleep(5)
 
-print("Sleep another 5 secs to make sure it's ready")
-time.sleep(5)
+print("Sleep another 15 secs to make sure it's ready")
+time.sleep(15)
 
 for prompt in prompts:
   # remove prompt label
