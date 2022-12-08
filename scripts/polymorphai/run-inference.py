@@ -109,7 +109,7 @@ def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, s
   metadata = { "steps": steps, "scale": scale, "seed": seed, "prompts": {} }
 
   for image_file in image_files:
-    image_index = int(image_file.replace(".png",""))
+    image_index = int(image_file.replace(".png","")) - 1
     prompt_index = math.floor(image_index / n_iter)
     prompt = prompts[prompt_index]
 
@@ -199,7 +199,7 @@ while(not is_socket_open(webui_host, webui_port)):
 print("Sleep another 5 secs to make sure it's ready")
 time.sleep(5)
 
-for line in lines:
+for prompt in prompts:
   # remove prompt label
   prompt = re.sub(r"^.*?@","",prompt) 
   run_inference(prompt, negative_prompt, samples_outdir, path_to_trained_model, steps, scale, n_iter, seed)
