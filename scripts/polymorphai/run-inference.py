@@ -67,9 +67,11 @@ image_count = 1
 
 def setup_automatic1111():
   global webui_proc
+  get_ipython().run_line_magic('cd', '/content/stable-diffusion-webui')
   webui_cmd = f'/content/stable-diffusion-webui/webui.sh  --disable-safe-unpickle --share --ckpt {path_to_trained_model} --api --port {webui_port} > /content/stable-diffusion-webui/webui.log 2>&1'
   webui_proc = subprocess.Popen(webui_cmd, shell=True, stdin=subprocess.PIPE, preexec_fn=os.setsid)
   print("setup:" + str(webui_proc))
+  get_ipython().run_line_magic('cd', '/content/diffusers/scripts/polymorphai')
 
 def kill_automatic1111():
   print("destroy:" + str(webui_proc))
