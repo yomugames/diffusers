@@ -26,6 +26,7 @@ import base64
 from PIL import Image
 import socket
 from contextlib import closing
+import mysql.connector
 
 parser = argparse.ArgumentParser(description="Dreambooth test script.")
 
@@ -132,6 +133,27 @@ def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, s
 
 
   
+def get_prompts(prompt_instance):
+  mydb = mysql.connector.connect(
+      host=os.getenv("DB_HOST"),
+      user=os.getenv("DB_USER"),
+      password=os.getenv("DB_PASS"),
+      database=os.getenv("DB_DATABASE")
+  )
+
+  mycursor = mydb.cursor(dictionary=True)
+  sql = "SELECT * FROM prompts WHERE enabled = '1'"
+  mycursor.execute(sql)
+  records = mycursor.fetchall()
+  mycursor.close()
+
+  result = []
+  for record in records:
+    prompt = record['prompt'].replace("<instance>",prompt_instance)
+    item = record['name'] + " from " + record['category'] + "@" + prompt
+    result.append(item)
+    
+  return result
 
 
 def upload_to_s3(session_name, output_dir):
@@ -161,10 +183,8 @@ prompt_instance = 'user_xyz person'
 ddim_configs = [10,25,40,60]
 scale_configs = [4,6,8,10,15]
 
-f = open("prompts.txt","r")
-prompts = list(filter(None, f.read().splitlines()))
-prompts = list(map(lambda prompt : prompt.replace("<instance>",prompt_instance) , prompts))
-f.close()
+prompts = get_prompts(prompt_instance)
+
 
 outdir = INF_OUTPUT_DIR 
 
