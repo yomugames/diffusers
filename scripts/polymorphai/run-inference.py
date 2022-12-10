@@ -10,6 +10,7 @@ from IPython.utils import capture
 import time
 import uuid
 
+
 import fileinput
 from subprocess import getoutput
 from IPython.display import HTML
@@ -83,11 +84,43 @@ def is_socket_open(host, port):
   with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
     return sock.connect_ex((host, port)) == 0
 
-def run_inference(prompt, negative_prompt, output_dir, path_to_trained_model, ddim_steps, cfg_scale, n_iter, seed):
+def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_trained_model, ddim_steps, cfg_scale, n_iter, seed):
   global image_count
+
+  if prompt['images']:
+    # run img2img
+    input_images = json.loads(prompt['images'])
+    for input_image in input_images:
+      with capture.capture_output() as cap:
+        payload = {
+          "init_images": [input_image],
+          "prompt": prompt_instance,
+          "steps": 35,
+          "denoising_strength": 0.22,
+          "cfg_scale": cfg_scale,
+          "sampler_index": "Euler a",
+          "seed": seed,
+          "width": 512,
+          "height": 512,
+          "n_iter": 1,
+          "restore_faces": True
+        }
+        response = requests.post(url=f'{automatic_web_url}/sdapi/v1/img2img', json=payload)
+        json_response = response.json()
+
+        # reduce iteration count for txt2img if we use img2img
+        n_iter -= 1
+
+        for i in json_response['images']:
+          image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
+          image.save(output_dir + '/' + str(image_count) + '.png')
+          image_count += 1
+      
+
   with capture.capture_output() as cap:
+    actual_prompt = prompt['prompt'].replace("<instance>",prompt_instance)
     payload = {
-      "prompt": prompt,
+      "prompt": actual_prompt,
       "negative_prompt": negative_prompt,
       "steps": ddim_steps,
       "cfg_scale": cfg_scale,
@@ -123,7 +156,7 @@ def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, s
     cmd = "mv " + old_path + " " + new_path
     print(cmd)
     get_ipython().system(cmd)
-    metadata["prompts"][new_image_uid] = prompt
+    metadata["prompts"][new_image_uid] = prompt['uid']
 
   print("saving image uid -> prompt map in metadata.txt")
   metadata_path = output_dir + "/metadata.txt"
@@ -149,9 +182,7 @@ def get_prompts(prompt_instance):
 
   result = []
   for record in records:
-    prompt = record['prompt'].replace("<instance>",prompt_instance)
-    item = record['name'] + " from " + record['category'] + "@" + prompt
-    result.append(item)
+    result.append(record)
     
   return result
 
@@ -222,9 +253,7 @@ print("Sleep another 15 secs to make sure it's ready")
 time.sleep(15)
 
 for prompt in prompts:
-  # remove prompt label
-  prompt = re.sub(r"^.*?@","",prompt) 
-  run_inference(prompt, negative_prompt, samples_outdir, path_to_trained_model, steps, scale, n_iter, seed)
+  run_inference(prompt_instance, prompt, negative_prompt, samples_outdir, path_to_trained_model, steps, scale, n_iter, seed)
 
 kill_automatic1111()
 
