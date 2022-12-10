@@ -92,8 +92,11 @@ def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_
     input_images = json.loads(prompt['images'])
     for input_image in input_images:
       with capture.capture_output() as cap:
+        raw_base64 = base64.b64encode(requests.get(input_image).content).decode('utf-8')
+        full_base64 = "data:image/png;base64," + raw_base64
+
         payload = {
-          "init_images": [input_image],
+          "init_images": [full_base64],
           "prompt": prompt_instance,
           "steps": 35,
           "denoising_strength": 0.22,
