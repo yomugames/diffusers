@@ -68,7 +68,7 @@ class WildcardStableDiffusionPipeline(DiffusionPipeline):
     Example Usage:
         pipe = WildcardStableDiffusionPipeline.from_pretrained(
             "CompVis/stable-diffusion-v1-4",
-            revision="fp16",
+
             torch_dtype=torch.float16,
         )
         prompt = "__animal__ sitting on a __object__ wearing a __clothing__"
@@ -135,7 +135,7 @@ class WildcardStableDiffusionPipeline(DiffusionPipeline):
             scheduler._internal_dict = FrozenDict(new_config)
 
         if safety_checker is None:
-            logger.warn(
+            logger.warning(
                 f"You have disabled the safety checker for {self.__class__} by passing `safety_checker=None`. Ensure"
                 " that you abide to the conditions of the Stable Diffusion license and do not expose unfiltered"
                 " results in services or applications open to the public. Both the diffusers team and Hugging Face"

@@ -20,11 +20,35 @@ from diffusers import Transformer2DModel, VQModel
 from diffusers.schedulers.scheduling_vq_diffusion import VQDiffusionScheduler
 from transformers import CLIPTextModel, CLIPTokenizer
 
+from ...configuration_utils import ConfigMixin, register_to_config
+from ...modeling_utils import ModelMixin
 from ...pipeline_utils import DiffusionPipeline, ImagePipelineOutput
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+class LearnedClassifierFreeSamplingEmbeddings(ModelMixin, ConfigMixin):
+    """
+    Utility class for storing learned text embeddings for classifier free sampling
+    """
+
+    @register_to_config
+    def __init__(self, learnable: bool, hidden_size: Optional[int] = None, length: Optional[int] = None):
+        super().__init__()
+
+        self.learnable = learnable
+
+        if self.learnable:
+            assert hidden_size is not None, "learnable=True requires `hidden_size` to be set"
+            assert length is not None, "learnable=True requires `length` to be set"
+
+            embeddings = torch.zeros(length, hidden_size)
+        else:
+            embeddings = None
+
+        self.embeddings = torch.nn.Parameter(embeddings)
 
 
 class VQDiffusionPipeline(DiffusionPipeline):
@@ -55,6 +79,7 @@ class VQDiffusionPipeline(DiffusionPipeline):
     text_encoder: CLIPTextModel
     tokenizer: CLIPTokenizer
     transformer: Transformer2DModel
+    learned_classifier_free_sampling_embeddings: LearnedClassifierFreeSamplingEmbeddings
     scheduler: VQDiffusionScheduler
 
     def __init__(
@@ -64,6 +89,7 @@ class VQDiffusionPipeline(DiffusionPipeline):
         tokenizer: CLIPTokenizer,
         transformer: Transformer2DModel,
         scheduler: VQDiffusionScheduler,
+        learned_classifier_free_sampling_embeddings: LearnedClassifierFreeSamplingEmbeddings,
     ):
         super().__init__()
 
@@ -73,77 +99,11 @@ class VQDiffusionPipeline(DiffusionPipeline):
             text_encoder=text_encoder,
             tokenizer=tokenizer,
             scheduler=scheduler,
+            learned_classifier_free_sampling_embeddings=learned_classifier_free_sampling_embeddings,
         )
 
-    @torch.no_grad()
-    def __call__(
-        self,
-        prompt: Union[str, List[str]],
-        num_inference_steps: int = 100,
-        truncation_rate: float = 1.0,
-        num_images_per_prompt: int = 1,
-        generator: Optional[torch.Generator] = None,
-        latents: Optional[torch.FloatTensor] = None,
-        output_type: Optional[str] = "pil",
-        return_dict: bool = True,
-        callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
-        callback_steps: Optional[int] = 1,
-    ) -> Union[ImagePipelineOutput, Tuple]:
-        """
-        Function invoked when calling the pipeline for generation.
-
-        Args:
-            prompt (`str` or `List[str]`):
-                The prompt or prompts to guide the image generation.
-            num_inference_steps (`int`, *optional*, defaults to 100):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference.
-            truncation_rate (`float`, *optional*, defaults to 1.0 (equivalent to no truncation)):
-                Used to "truncate" the predicted classes for x_0 such that the cumulative probability for a pixel is at
-                most `truncation_rate`. The lowest probabilities that would increase the cumulative probability above
-                `truncation_rate` are set to zero.
-            num_images_per_prompt (`int`, *optional*, defaults to 1):
-                The number of images to generate per prompt.
-            generator (`torch.Generator`, *optional*):
-                A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
-                deterministic.
-            latents (`torch.FloatTensor` of shape (batch), *optional*):
-                Pre-generated noisy latents to be used as inputs for image generation. Must be valid embedding indices.
-                Can be used to tweak the same generation with different prompts. If not provided, a latents tensor will
-                be generated of completely masked latent pixels.
-            output_type (`str`, *optional*, defaults to `"pil"`):
-                The output format of the generated image. Choose between
-                [PIL](https://pillow.readthedocs.io/en/stable/): `PIL.Image.Image` or `np.array`.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~pipeline_utils.ImagePipelineOutput`] instead of a plain tuple.
-            callback (`Callable`, *optional*):
-                A function that will be called every `callback_steps` steps during inference. The function will be
-                called with the following arguments: `callback(step: int, timestep: int, latents: torch.FloatTensor)`.
-            callback_steps (`int`, *optional*, defaults to 1):
-                The frequency at which the `callback` function will be called. If not specified, the callback will be
-                called at every step.
-
-        Returns:
-            [`~pipeline_utils.ImagePipelineOutput`] or `tuple`: [`~ pipeline_utils.ImagePipelineOutput `] if
-            `return_dict` is True, otherwise a `tuple. When returning a tuple, the first element is a list with the
-            generated images.
-        """
-        if isinstance(prompt, str):
-            batch_size = 1
-        elif isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            raise ValueError(f"`prompt` has to be of type `str` or `list` but is {type(prompt)}")
-
-        batch_size = batch_size * num_images_per_prompt
-
-        if (callback_steps is None) or (
-            callback_steps is not None and (not isinstance(callback_steps, int) or callback_steps <= 0)
-        ):
-            raise ValueError(
-                f"`callback_steps` has to be a positive integer but is {callback_steps} of type"
-                f" {type(callback_steps)}."
-            )
+    def _encode_prompt(self, prompt, num_images_per_prompt, do_classifier_free_guidance):
+        batch_size = len(prompt) if isinstance(prompt, list) else 1
 
         # get prompt text embeddings
         text_inputs = self.tokenizer(
@@ -174,6 +134,118 @@ class VQDiffusionPipeline(DiffusionPipeline):
         # duplicate text embeddings for each generation per prompt
         text_embeddings = text_embeddings.repeat_interleave(num_images_per_prompt, dim=0)
 
+        if do_classifier_free_guidance:
+            if self.learned_classifier_free_sampling_embeddings.learnable:
+                uncond_embeddings = self.learned_classifier_free_sampling_embeddings.embeddings
+                uncond_embeddings = uncond_embeddings.unsqueeze(0).repeat(batch_size, 1, 1)
+            else:
+                uncond_tokens = [""] * batch_size
+
+                max_length = text_input_ids.shape[-1]
+                uncond_input = self.tokenizer(
+                    uncond_tokens,
+                    padding="max_length",
+                    max_length=max_length,
+                    truncation=True,
+                    return_tensors="pt",
+                )
+                uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.device))[0]
+                # See comment for normalizing text embeddings
+                uncond_embeddings = uncond_embeddings / uncond_embeddings.norm(dim=-1, keepdim=True)
+
+            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            seq_len = uncond_embeddings.shape[1]
+            uncond_embeddings = uncond_embeddings.repeat(1, num_images_per_prompt, 1)
+            uncond_embeddings = uncond_embeddings.view(batch_size * num_images_per_prompt, seq_len, -1)
+
+            # For classifier free guidance, we need to do two forward passes.
+            # Here we concatenate the unconditional and text embeddings into a single batch
+            # to avoid doing two forward passes
+            text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+
+        return text_embeddings
+
+    @torch.no_grad()
+    def __call__(
+        self,
+        prompt: Union[str, List[str]],
+        num_inference_steps: int = 100,
+        guidance_scale: float = 5.0,
+        truncation_rate: float = 1.0,
+        num_images_per_prompt: int = 1,
+        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        latents: Optional[torch.FloatTensor] = None,
+        output_type: Optional[str] = "pil",
+        return_dict: bool = True,
+        callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
+        callback_steps: Optional[int] = 1,
+    ) -> Union[ImagePipelineOutput, Tuple]:
+        """
+        Function invoked when calling the pipeline for generation.
+
+        Args:
+            prompt (`str` or `List[str]`):
+                The prompt or prompts to guide the image generation.
+            num_inference_steps (`int`, *optional*, defaults to 100):
+                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
+                expense of slower inference.
+            guidance_scale (`float`, *optional*, defaults to 7.5):
+                Guidance scale as defined in [Classifier-Free Diffusion Guidance](https://arxiv.org/abs/2207.12598).
+                `guidance_scale` is defined as `w` of equation 2. of [Imagen
+                Paper](https://arxiv.org/pdf/2205.11487.pdf). Guidance scale is enabled by setting `guidance_scale >
+                1`. Higher guidance scale encourages to generate images that are closely linked to the text `prompt`,
+                usually at the expense of lower image quality.
+            truncation_rate (`float`, *optional*, defaults to 1.0 (equivalent to no truncation)):
+                Used to "truncate" the predicted classes for x_0 such that the cumulative probability for a pixel is at
+                most `truncation_rate`. The lowest probabilities that would increase the cumulative probability above
+                `truncation_rate` are set to zero.
+            num_images_per_prompt (`int`, *optional*, defaults to 1):
+                The number of images to generate per prompt.
+            generator (`torch.Generator`, *optional*):
+                One or a list of [torch generator(s)](https://pytorch.org/docs/stable/generated/torch.Generator.html)
+                to make generation deterministic.
+            latents (`torch.FloatTensor` of shape (batch), *optional*):
+                Pre-generated noisy latents to be used as inputs for image generation. Must be valid embedding indices.
+                Can be used to tweak the same generation with different prompts. If not provided, a latents tensor will
+                be generated of completely masked latent pixels.
+            output_type (`str`, *optional*, defaults to `"pil"`):
+                The output format of the generated image. Choose between
+                [PIL](https://pillow.readthedocs.io/en/stable/): `PIL.Image.Image` or `np.array`.
+            return_dict (`bool`, *optional*, defaults to `True`):
+                Whether or not to return a [`~pipeline_utils.ImagePipelineOutput`] instead of a plain tuple.
+            callback (`Callable`, *optional*):
+                A function that will be called every `callback_steps` steps during inference. The function will be
+                called with the following arguments: `callback(step: int, timestep: int, latents: torch.FloatTensor)`.
+            callback_steps (`int`, *optional*, defaults to 1):
+                The frequency at which the `callback` function will be called. If not specified, the callback will be
+                called at every step.
+
+        Returns:
+            [`~pipeline_utils.ImagePipelineOutput`] or `tuple`: [`~ pipeline_utils.ImagePipelineOutput `] if
+            `return_dict` is True, otherwise a `tuple. When returning a tuple, the first element is a list with the
+            generated images.
+        """
+        if isinstance(prompt, str):
+            batch_size = 1
+        elif isinstance(prompt, list):
+            batch_size = len(prompt)
+        else:
+            raise ValueError(f"`prompt` has to be of type `str` or `list` but is {type(prompt)}")
+
+        batch_size = batch_size * num_images_per_prompt
+
+        do_classifier_free_guidance = guidance_scale > 1.0
+
+        text_embeddings = self._encode_prompt(prompt, num_images_per_prompt, do_classifier_free_guidance)
+
+        if (callback_steps is None) or (
+            callback_steps is not None and (not isinstance(callback_steps, int) or callback_steps <= 0)
+        ):
+            raise ValueError(
+                f"`callback_steps` has to be a positive integer but is {callback_steps} of type"
+                f" {type(callback_steps)}."
+            )
+
         # get the initial completely masked latents unless the user supplied it
 
         latents_shape = (batch_size, self.transformer.num_latent_pixels)
@@ -198,9 +270,19 @@ class VQDiffusionPipeline(DiffusionPipeline):
         sample = latents
 
         for i, t in enumerate(self.progress_bar(timesteps_tensor)):
+            # expand the sample if we are doing classifier free guidance
+            latent_model_input = torch.cat([sample] * 2) if do_classifier_free_guidance else sample
+
             # predict the un-noised image
             # model_output == `log_p_x_0`
-            model_output = self.transformer(sample, encoder_hidden_states=text_embeddings, timestep=t).sample
+            model_output = self.transformer(
+                latent_model_input, encoder_hidden_states=text_embeddings, timestep=t
+            ).sample
+
+            if do_classifier_free_guidance:
+                model_output_uncond, model_output_text = model_output.chunk(2)
+                model_output = model_output_uncond + guidance_scale * (model_output_text - model_output_uncond)
+                model_output -= torch.logsumexp(model_output, dim=1, keepdim=True)
 
             model_output = self.truncate(model_output, truncation_rate)
 

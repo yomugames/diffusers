@@ -21,13 +21,11 @@ import torch
 from diffusers import ScoreSdeVePipeline, ScoreSdeVeScheduler, UNet2DModel
 from diffusers.utils.testing_utils import require_torch, slow, torch_device
 
-from ...test_pipelines_common import PipelineTesterMixin
-
 
 torch.backends.cuda.matmul.allow_tf32 = False
 
 
-class ScoreSdeVeipelineFastTests(PipelineTesterMixin, unittest.TestCase):
+class ScoreSdeVeipelineFastTests(unittest.TestCase):
     @property
     def dummy_uncond_unet(self):
         torch.manual_seed(0)
@@ -74,7 +72,7 @@ class ScoreSdeVePipelineIntegrationTests(unittest.TestCase):
         model_id = "google/ncsnpp-church-256"
         model = UNet2DModel.from_pretrained(model_id)
 
-        scheduler = ScoreSdeVeScheduler.from_config(model_id)
+        scheduler = ScoreSdeVeScheduler.from_pretrained(model_id)
 
         sde_ve = ScoreSdeVePipeline(unet=model, scheduler=scheduler)
         sde_ve.to(torch_device)

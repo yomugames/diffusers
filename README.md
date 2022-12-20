@@ -29,13 +29,13 @@ More precisely, 🤗 Diffusers offers:
 
 ### For PyTorch
 
-**With `pip`**
+**With `pip`** (official package)
     
 ```bash
 pip install --upgrade diffusers[torch]
 ```
 
-**With `conda`**
+**With `conda`** (maintained by the community)
 
 ```sh
 conda install -c conda-forge diffusers
@@ -79,19 +79,13 @@ In order to get started, we recommend taking a look at two notebooks:
 Stable Diffusion is a text-to-image latent diffusion model created by the researchers and engineers from [CompVis](https://github.com/CompVis), [Stability AI](https://stability.ai/), [LAION](https://laion.ai/) and [RunwayML](https://runwayml.com/). It's trained on 512x512 images from a subset of the [LAION-5B](https://laion.ai/blog/laion-5b/) database. This model uses a frozen CLIP ViT-L/14 text encoder to condition the model on text prompts. With its 860M UNet and 123M text encoder, the model is relatively lightweight and runs on a GPU with at least 4GB VRAM.
 See the [model card](https://huggingface.co/CompVis/stable-diffusion) for more information.
 
-You need to accept the model license before downloading or using the Stable Diffusion weights. Please, visit the [model card](https://huggingface.co/runwayml/stable-diffusion-v1-5), read the license carefully and tick the checkbox if you agree. You have to be a registered user in 🤗 Hugging Face Hub, and you'll also need to use an access token for the code to work. For more information on access tokens, please refer to [this section](https://huggingface.co/docs/hub/security-tokens) of the documentation.
-
 
 ### Text-to-Image generation with Stable Diffusion
 
 First let's install
-```bash
-pip install --upgrade diffusers transformers scipy
-```
 
-Run this command to log in with your HF Hub token if you haven't before (you can skip this step if you prefer to run the model locally, follow [this](#running-the-model-locally) instead)
 ```bash
-huggingface-cli login
+pip install --upgrade diffusers transformers accelerate
 ```
 
 We recommend using the model in [half-precision (`fp16`)](https://pytorch.org/blog/accelerating-training-on-nvidia-gpus-with-pytorch-automatic-mixed-precision/) as it gives almost always the same results as full
@@ -101,7 +95,7 @@ precision while being roughly twice as fast and requiring half the amount of GPU
 import torch
 from diffusers import StableDiffusionPipeline
 
-pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16, revision="fp16")
+pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
 pipe = pipe.to("cuda")
 
 prompt = "a photo of an astronaut riding a horse on mars"
@@ -109,17 +103,16 @@ image = pipe(prompt).images[0]
 ```
 
 #### Running the model locally
-If you don't want to login to Hugging Face, you can also simply download the model folder
-(after having [accepted the license](https://huggingface.co/runwayml/stable-diffusion-v1-5)) and pass
-the path to the local folder to the `StableDiffusionPipeline`.
+
+You can also simply download the model folder and pass the path to the local folder to the `StableDiffusionPipeline`.
 
 ```
 git lfs install
 git clone https://huggingface.co/runwayml/stable-diffusion-v1-5
 ```
 
-Assuming the folder is stored locally under `./stable-diffusion-v1-5`, you can also run stable diffusion
-without requiring an authentication token:
+Assuming the folder is stored locally under `./stable-diffusion-v1-5`, you can run stable diffusion
+as follows:
 
 ```python
 pipe = StableDiffusionPipeline.from_pretrained("./stable-diffusion-v1-5")
@@ -134,11 +127,7 @@ to using `fp16`.
 The following snippet should result in less than 4GB VRAM.
 
 ```python
-pipe = StableDiffusionPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5", 
-    revision="fp16", 
-    torch_dtype=torch.float16,
-)
+pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
 pipe = pipe.to("cuda")
 
 prompt = "a photo of an astronaut riding a horse on mars"
@@ -152,15 +141,7 @@ it before the pipeline and pass it to `from_pretrained`.
 ```python
 from diffusers import LMSDiscreteScheduler
 
-lms = LMSDiscreteScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
-
-pipe = StableDiffusionPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5", 
-    revision="fp16", 
-    torch_dtype=torch.float16,
-    scheduler=lms,
-)
-pipe = pipe.to("cuda")
+pipe.scheduler = LMSDiscreteScheduler.from_config(pipe.scheduler.config)
 
 prompt = "a photo of an astronaut riding a horse on mars"
 image = pipe(prompt).images[0]  
@@ -172,7 +153,6 @@ If you want to run Stable Diffusion on CPU or you want to have maximum precision
 please run the model in the default *full-precision* setting:
 
 ```python
-# make sure you're logged in with `huggingface-cli login`
 from diffusers import StableDiffusionPipeline
 
 pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
@@ -270,11 +250,8 @@ from diffusers import StableDiffusionImg2ImgPipeline
 # load the pipeline
 device = "cuda"
 model_id_or_path = "runwayml/stable-diffusion-v1-5"
-pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
-    model_id_or_path,
-    revision="fp16", 
-    torch_dtype=torch.float16,
-)
+pipe = StableDiffusionImg2ImgPipeline.from_pretrained(model_id_or_path, torch_dtype=torch.float16)
+
 # or download via git clone https://huggingface.co/runwayml/stable-diffusion-v1-5
 # and pass `model_id_or_path="./stable-diffusion-v1-5"`.
 pipe = pipe.to(device)
@@ -288,7 +265,7 @@ init_image = init_image.resize((768, 512))
 
 prompt = "A fantasy landscape, trending on artstation"
 
-images = pipe(prompt=prompt, init_image=init_image, strength=0.75, guidance_scale=7.5).images
+images = pipe(prompt=prompt, image=init_image, strength=0.75, guidance_scale=7.5).images
 
 images[0].save("fantasy_landscape.png")
 ```
@@ -296,10 +273,7 @@ You can also run this example on colab [![Open In Colab](https://colab.research.
 
 ### In-painting using Stable Diffusion
 
-The `StableDiffusionInpaintPipeline` lets you edit specific parts of an image by providing a mask and a text prompt. It uses a model optimized for this particular task, whose license you need to accept before use.
-
-Please, visit the [model card](https://huggingface.co/runwayml/stable-diffusion-inpainting), read the license carefully and tick the checkbox if you agree. Note that this is an additional license, you need to accept it even if you accepted the text-to-image Stable Diffusion license in the past. You have to be a registered user in 🤗 Hugging Face Hub, and you'll also need to use an access token for the code to work. For more information on access tokens, please refer to [this section](https://huggingface.co/docs/hub/security-tokens) of the documentation.
-
+The `StableDiffusionInpaintPipeline` lets you edit specific parts of an image by providing a mask and a text prompt.
 
 ```python
 import PIL
@@ -319,11 +293,7 @@ mask_url = "https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data
 init_image = download_image(img_url).resize((512, 512))
 mask_image = download_image(mask_url).resize((512, 512))
 
-pipe = StableDiffusionInpaintPipeline.from_pretrained(
-    "runwayml/stable-diffusion-inpainting",
-    revision="fp16",
-    torch_dtype=torch.float16,
-)
+pipe = StableDiffusionInpaintPipeline.from_pretrained("runwayml/stable-diffusion-inpainting", torch_dtype=torch.float16)
 pipe = pipe.to("cuda")
 
 prompt = "Face of a yellow cat, high resolution, sitting on a park bench"
@@ -332,11 +302,8 @@ image = pipe(prompt=prompt, image=init_image, mask_image=mask_image).images[0]
 
 ### Tweak prompts reusing seeds and latents
 
-You can generate your own latents to reproduce results, or tweak your prompt on a specific result you liked. [This notebook](https://github.com/pcuenca/diffusers-examples/blob/main/notebooks/stable-diffusion-seeds.ipynb) shows how to do it step by step. You can also run it in Google Colab [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pcuenca/diffusers-examples/blob/main/notebooks/stable-diffusion-seeds.ipynb).
-
-
-For more details, check out [the Stable Diffusion notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffusers/stable_diffusion.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffusers/stable_diffusion.ipynb)
-and have a look into the [release notes](https://github.com/huggingface/diffusers/releases/tag/v0.2.0).
+You can generate your own latents to reproduce results, or tweak your prompt on a specific result you liked.
+Please have a look at [Reusing seeds for deterministic generation](https://huggingface.co/docs/diffusers/main/en/using-diffusers/reusing_seeds).
 
 ## Fine-Tuning Stable Diffusion
 
@@ -353,7 +320,8 @@ Textual Inversion is a technique for capturing novel concepts from a small numbe
 
 ## Stable Diffusion Community Pipelines
 
-The release of Stable Diffusion as an open source model has fostered a lot of interesting ideas and experimentation. Our [Community Examples folder](https://github.com/huggingface/diffusers/tree/main/examples/community) contains many ideas worth exploring, like interpolating to create animated videos, using CLIP Guidance for additional prompt fidelity, term weighting, and much more! [Take a look](https://huggingface.co/docs/diffusers/using-diffusers/custom_pipeline_overview) and [contribute your own](https://huggingface.co/docs/diffusers/using-diffusers/contribute_pipeline).
+The release of Stable Diffusion as an open source model has fostered a lot of interesting ideas and experimentation. 
+Our [Community Examples folder](https://github.com/huggingface/diffusers/tree/main/examples/community) contains many ideas worth exploring, like interpolating to create animated videos, using CLIP Guidance for additional prompt fidelity, term weighting, and much more! [Take a look](https://huggingface.co/docs/diffusers/using-diffusers/custom_pipeline_overview) and [contribute your own](https://huggingface.co/docs/diffusers/using-diffusers/contribute_pipeline).
 
 ## Other Examples
 
@@ -402,9 +370,13 @@ image.save("ddpm_generated_image.png")
 - [Unconditional Latent Diffusion](https://huggingface.co/CompVis/ldm-celebahq-256)
 - [Unconditional Diffusion with continuous scheduler](https://huggingface.co/google/ncsnpp-ffhq-1024)
 
-**Other Notebooks**:
+**Other Image Notebooks**:
 * [image-to-image generation with Stable Diffusion](https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffusers/image_2_image_using_diffusers.ipynb) ![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg),
 * [tweak images via repeated Stable Diffusion seeds](https://colab.research.google.com/github/pcuenca/diffusers-examples/blob/main/notebooks/stable-diffusion-seeds.ipynb) ![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg),
+
+**Diffusers for Other Modalities**:
+* [Molecule conformation generation](https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffusers/geodiff_molecule_conformation.ipynb) ![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg),
+* [Model-based reinforcement learning](https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffusers/reinforcement_learning_with_diffusers.ipynb) ![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg),
 
 ### Web Demos
 If you just want to play around with some web demos, you can try out the following 🚀 Spaces:
