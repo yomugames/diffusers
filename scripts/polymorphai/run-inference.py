@@ -169,7 +169,7 @@ def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, s
 
 
   
-def get_prompts(prompt_instance):
+def get_prompts(prompt_instance, gender):
   mydb = mysql.connector.connect(
       host=os.getenv("DB_HOST"),
       user=os.getenv("DB_USER"),
@@ -178,7 +178,7 @@ def get_prompts(prompt_instance):
   )
 
   mycursor = mydb.cursor(dictionary=True)
-  sql = "SELECT * FROM prompts WHERE enabled = '1'"
+  sql = "SELECT * FROM prompts WHERE enabled = '1' and gender = '" + gender + "'"
   mycursor.execute(sql)
   records = mycursor.fetchall()
   mycursor.close()
@@ -217,7 +217,7 @@ prompt_instance = 'user_xyz person'
 ddim_configs = [10,25,40,60]
 scale_configs = [4,6,8,10,15]
 
-prompts = get_prompts(prompt_instance)
+prompts = get_prompts(prompt_instance, opt.gender)
 
 
 outdir = INF_OUTPUT_DIR 
