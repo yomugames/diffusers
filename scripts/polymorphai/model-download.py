@@ -77,7 +77,6 @@ def downloadmodel():
   if os.path.exists('/content/stable-diffusion-v1-5/unet/diffusion_pytorch_model.bin'):
     get_ipython().system('git clone "https://USER:{token}@huggingface.co/stabilityai/sd-vae-ft-mse"')
     get_ipython().system('mv /content/stable-diffusion-v1-5/sd-vae-ft-mse /content/stable-diffusion-v1-5/vae')
-    get_ipython().system('rm -r /content/stable-diffusion-v1-5/.git')
     get_ipython().system('sed -i \'s@"clip_sample": false@@g\' /content/stable-diffusion-v1-5/scheduler/scheduler_config.json')
     get_ipython().system('sed -i \'s@"trained_betas": null,@"trained_betas": null@g\' /content/stable-diffusion-v1-5/scheduler/scheduler_config.json')
     get_ipython().system('sed -i \'s@"sample_size": 256,@"sample_size": 512,@g\' /content/stable-diffusion-v1-5/vae/config.json')

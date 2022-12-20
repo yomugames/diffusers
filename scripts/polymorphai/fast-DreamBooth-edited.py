@@ -120,47 +120,15 @@ def reg():
 
 #@markdown - If you're training on a subject with a face or a movie/style that contains faces. (experimental, still needs some tuning) 
 
-if os.path.exists(str(SESSION_DIR)) and not os.path.exists(str(SESSION_DIR+"/"+Session_Name+'.ckpt')):
-  print('[1;32mLoading session with no previous model, using the original model or the custom downloaded model')
-  reg()
-  if not os.path.exists('/content/stable-diffusion-v1-5/unet/diffusion_pytorch_model.bin'):
-    if os.path.exists('/content/stable-diffusion-v1-5'):
-      get_ipython().system("rm -r '/content/stable-diffusion-v1-5'")
-    #fdownloadmodel()
-  if not os.path.exists('/content/stable-diffusion-v1-5/unet/diffusion_pytorch_model.bin'):
-    print('[1;31mError downloading the model, make sure you have accepted the terms at https://huggingface.co/runwayml/stable-diffusion-v1-5')
-  else:
-    print('[1;32mSession Loaded, proceed to uploading instance images')
+get_ipython().run_line_magic('mkdir', '-p "$INSTANCE_DIR"')
+print('[1;32mCreating session...')
+reg()
 
-elif os.path.exists(str(SESSION_DIR+"/"+Session_Name+'.ckpt')):
-  print('[1;32mSession found, loading the trained model ...')
-  reg()
-  get_ipython().run_line_magic('mkdir', '-p "$OUTPUT_DIR"')
-  get_ipython().system('python /content/diffusers/scripts/convert_original_stable_diffusion_to_diffusers.py --checkpoint_path "$MDLPTH" --dump_path "$OUTPUT_DIR" --session_dir "$SESSION_DIR"')
-  if os.path.exists(OUTPUT_DIR+'/unet/diffusion_pytorch_model.bin'):
-    resume=True    
-    get_ipython().system('rm /content/v1-inference.yaml')
-    clear_output()
-    print('[1;32mSession loaded.')
-  else:     
-    get_ipython().system('rm /content/v1-inference.yaml')
-    if not os.path.exists(OUTPUT_DIR+'/unet/diffusion_pytorch_model.bin'):
-      print('[1;31mConversion error, if the error persists, remove the CKPT file from the current session folder')
+if os.path.exists('/content/stable-diffusion-v1-5/unet/diffusion_pytorch_model.bin'):
+  print('[1;32mSession created, proceed to uploading instance images')
+else:
+  print('[1;31mError downloading the model, make sure you have accepted the terms at https://huggingface.co/runwayml/stable-diffusion-v1-5')  
 
-
-elif not os.path.exists(str(SESSION_DIR)):
-    get_ipython().run_line_magic('mkdir', '-p "$INSTANCE_DIR"')
-    print('[1;32mCreating session...')
-    reg()
-    if not os.path.exists('/content/stable-diffusion-v1-5/unet/diffusion_pytorch_model.bin'):
-      if os.path.exists('/content/stable-diffusion-v1-5'):
-        get_ipython().system("rm -r '/content/stable-diffusion-v1-5'")
-      #fdownloadmodel()
-    if os.path.exists('/content/stable-diffusion-v1-5/unet/diffusion_pytorch_model.bin'):
-      print('[1;32mSession created, proceed to uploading instance images')
-    else:
-      print('[1;31mError downloading the model, make sure you have accepted the terms at https://huggingface.co/runwayml/stable-diffusion-v1-5')  
-    
 if Contains_faces == "Female":
   CLASS_DIR=CLASS_DIR+'/Mix'
 if Contains_faces == "Male":
