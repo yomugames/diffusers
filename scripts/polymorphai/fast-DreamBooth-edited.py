@@ -104,25 +104,12 @@ OUTPUT_DIR="/content/models/"+Session_Name
 SESSION_DIR=WORKSPACE+'/Sessions/'+Session_Name
 INSTANCE_DIR=SESSION_DIR+'/instance_images'
 MDLPTH=str(SESSION_DIR+"/"+Session_Name+'.ckpt')
-CLASS_DIR=SESSION_DIR+'/Regularization_images'
-
-
-def reg():
-  with capture.capture_output() as cap:
-    if Contains_faces!="No":
-      if not os.path.exists(str(CLASS_DIR)):
-        get_ipython().run_line_magic('mkdir', '-p "$CLASS_DIR"')
-      get_ipython().run_line_magic('cd', '$CLASS_DIR')
-      get_ipython().system("cp -R /content/Regularization/Women .")
-      get_ipython().system("cp -R /content/Regularization/Men .")
-      get_ipython().system("cp -R /content/Regularization/Mix .")
-      get_ipython().run_line_magic('cd', '/content')
+CLASS_DIR='/content/Regularization'
 
 #@markdown - If you're training on a subject with a face or a movie/style that contains faces. (experimental, still needs some tuning) 
 
 get_ipython().run_line_magic('mkdir', '-p "$INSTANCE_DIR"')
 print('[1;32mCreating session...')
-reg()
 
 if os.path.exists('/content/stable-diffusion-v1-5/unet/diffusion_pytorch_model.bin'):
   print('[1;32mSession created, proceed to uploading instance images')
@@ -427,7 +414,7 @@ def txtenc_train(Caption, stpsv, stp, MODELT_NAME, INSTANCE_DIR, CLASS_DIR, OUTP
   _, _, files = next(os.walk(CLASS_DIR))
   class_count = len(files)
   print('[1;33mTraining the text encoder with regularization using the model (' + MODEL_NAME + ')...[0m')
-  get_ipython().system('accelerate launch --num_cpu_threads_per_process 4 /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption    --train_text_encoder         --pretrained_model_name_or_path="$MODEL_NAME"  --instance_data_dir="$INSTANCE_DIR"      --class_data_dir="$CLASS_DIR"      --output_dir="$OUTPUT_DIR"      --with_prior_preservation --prior_loss_weight=1.0      --instance_prompt="$PT" --class_prompt="$CPT"    --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=1      --gradient_accumulation_steps=1 --gradient_checkpointing      --use_8bit_adam      --learning_rate=1e-6      --lr_scheduler="constant"      --lr_warmup_steps="$Lr_warmup_steps"      --max_train_steps=$Training_Steps      --num_class_images=$class_count')
+  get_ipython().system('accelerate launch --num_cpu_threads_per_process 4 /content/diffusers/examples/dreambooth/train_dreambooth.py      $Caption    --train_text_encoder  --checkpointing_steps=5000  --pretrained_model_name_or_path="$MODEL_NAME"  --instance_data_dir="$INSTANCE_DIR"      --class_data_dir="$CLASS_DIR"      --output_dir="$OUTPUT_DIR"      --with_prior_preservation --prior_loss_weight=1.0      --instance_prompt="$PT" --class_prompt="$CPT"    --seed=$Seed      --resolution=512      --mixed_precision=$precision      --train_batch_size=1      --gradient_accumulation_steps=1 --gradient_checkpointing      --use_8bit_adam      --learning_rate=1e-6      --lr_scheduler="constant"      --lr_warmup_steps="$Lr_warmup_steps"      --max_train_steps=$Training_Steps      --num_class_images=$class_count')
 
 def unet_train(Caption, SESSION_DIR, stpsv, stp, MODELT_NAME, INSTANCE_DIR, OUTPUT_DIR, PT, Seed, precision, Training_Steps):
   clear_output()
