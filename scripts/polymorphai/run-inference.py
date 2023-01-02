@@ -260,8 +260,6 @@ try:
   time.sleep(15)
 
   for prompt in prompts:
-    if prompt['uid'] != 'tGep6e0cs1s5qZ9bpeQc':
-      continue
     run_inference(prompt_instance, prompt, negative_prompt, samples_outdir, path_to_trained_model, steps, scale, n_iter, seed)
   rename_files_and_write_metadata(samples_outdir, prompts, steps, scale, n_iter, seed)
 
