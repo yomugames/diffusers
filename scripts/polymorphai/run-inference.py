@@ -17,6 +17,7 @@ from IPython.display import HTML
 import random
 import subprocess
 import signal
+import traceback
 
 import argparse
 import boto3
@@ -24,6 +25,7 @@ import re
 import requests
 import io
 import base64
+from gradio.processing_utils import encode_pil_to_base64
 from PIL import Image
 import socket
 from contextlib import closing
@@ -87,19 +89,46 @@ def is_socket_open(host, port):
 def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_trained_model, ddim_steps, cfg_scale, n_iter, seed):
   global image_count
 
-  if prompt['images']:
+  is_img2img_flow = 'img2img_prompt' in prompt and prompt['img2img_prompt'] is not None
+  print ("is img2img: " + str(is_img2img_flow))
+
+  actual_prompt = prompt['prompt'].replace("<instance>",prompt_instance)
+  payload = {
+    "prompt": actual_prompt,
+    "negative_prompt": negative_prompt,
+    "steps": ddim_steps,
+    "cfg_scale": cfg_scale,
+    "sampler_index": "DDIM",
+    "seed": seed,
+    "width": 512,
+    "height": 512,
+    "n_iter": n_iter,
+    "restore_faces": True
+  }
+  #print ("txt params: " + json.dumps(payload, indent = 2))
+  response = requests.post(url=f'{automatic_web_url}/sdapi/v1/txt2img', json=payload)
+  json_response = response.json()
+  extension = ".png" if not is_img2img_flow else ".tmp.png"
+  for i in json_response['images']:
+    image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
+    image.save(output_dir + '/' + str(image_count) + extension)
+    image_count += 1
+
+  if is_img2img_flow:
     # run img2img
-    input_images = json.loads(prompt['images'])
-    for input_image in input_images:
+    actual_prompt = prompt['img2img_prompt'].replace("<instance>",prompt_instance)
+    files = os.listdir(output_dir)
+    image_files = [f for f in files if os.path.isfile(output_dir+'/'+f) and f.endswith(".tmp.png")]
+    for input_image in image_files:
       with capture.capture_output() as cap:
-        raw_base64 = base64.b64encode(requests.get(input_image).content).decode('utf-8')
-        full_base64 = "data:image/png;base64," + raw_base64
+        full_base64 = encode_pil_to_base64(Image.open(output_dir + '/' + input_image, "r"))
 
         payload = {
           "init_images": [full_base64],
-          "prompt": prompt_instance,
+          "prompt": actual_prompt,
+          "negative_prompt": negative_prompt,
           "steps": 35,
-          "denoising_strength": 0.22,
+          "denoising_strength": 0.28,
           "cfg_scale": cfg_scale,
           "sampler_index": "Euler a",
           "seed": seed,
@@ -111,39 +140,15 @@ def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_
         response = requests.post(url=f'{automatic_web_url}/sdapi/v1/img2img', json=payload)
         json_response = response.json()
 
-        # reduce iteration count for txt2img if we use img2img
-        n_iter -= 1
-
         for i in json_response['images']:
+          output_filename = input_image[:-8] + ".png"
           image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
-          image.save(output_dir + '/' + str(image_count) + '.png')
+          image.save(output_dir + '/' + output_filename)
           image_count += 1
-      
-
-  with capture.capture_output() as cap:
-    actual_prompt = prompt['prompt'].replace("<instance>",prompt_instance)
-    payload = {
-      "prompt": actual_prompt,
-      "negative_prompt": negative_prompt,
-      "steps": ddim_steps,
-      "cfg_scale": cfg_scale,
-      "sampler_index": "DDIM",
-      "seed": seed,
-      "width": 512,
-      "height": 512,
-      "n_iter": n_iter,
-      "restore_faces": True
-    }
-    response = requests.post(url=f'{automatic_web_url}/sdapi/v1/txt2img', json=payload)
-    json_response = response.json()
-    for i in json_response['images']:
-      image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
-      image.save(output_dir + '/' + str(image_count) + '.png')
-      image_count += 1
 
 def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, seed):
   files = os.listdir(output_dir)
-  image_files = [f for f in files if os.path.isfile(output_dir+'/'+f) and f.endswith(".png")]
+  image_files = [f for f in files if os.path.isfile(output_dir+'/'+f) and f.endswith(".png") and not f.endswith(".tmp.png")]
 
   metadata = { "steps": steps, "scale": scale, "seed": seed, "prompts": {} }
 
@@ -152,7 +157,7 @@ def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, s
     prompt_index = math.floor(image_index / n_iter)
     prompt = prompts[prompt_index]
 
-    new_image_uid = str(uuid.uuid4()) 
+    new_image_uid = str(uuid.uuid4())
 
     old_path = output_dir + "/" + image_file
     new_path = output_dir + "/" + new_image_uid + ".png"
@@ -168,7 +173,6 @@ def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, s
   f.close()
 
 
-  
 def get_prompts(prompt_instance, gender):
   mydb = mysql.connector.connect(
       host=os.getenv("DB_HOST"),
@@ -186,7 +190,7 @@ def get_prompts(prompt_instance, gender):
   result = []
   for record in records:
     result.append(record)
-    
+
   return result
 
 
@@ -198,14 +202,14 @@ def upload_to_s3(session_name, output_dir):
   image_files = [f for f in files if os.path.isfile(output_dir+'/'+f) and f.endswith(".png")]
   for image_file in image_files:
     s3key = "results/" + session_name + "/" + image_file
-    s3.upload_file(output_dir + '/' + image_file, "polymorph-ai", s3key)  
+    s3.upload_file(output_dir + '/' + image_file, "polymorph-ai", s3key)
 
   # upload zip
-  file_name = "polymorf.zip" 
+  file_name = "polymorf.zip"
   zip_file = output_dir + "/" + file_name
   get_ipython().system("cd " + output_dir + " && zip -r  " + file_name + " *.png")
   s3key = "results/" + session_name + "/" + file_name
-  s3.upload_file(zip_file, "polymorph-ai", s3key)  
+  s3.upload_file(zip_file, "polymorph-ai", s3key)
 
 
 #prompt='photo of user_xyz person working out in a gym'
@@ -220,46 +224,49 @@ scale_configs = [4,6,8,10,15]
 prompts = get_prompts(prompt_instance, opt.gender)
 
 
-outdir = INF_OUTPUT_DIR 
+outdir = INF_OUTPUT_DIR
 
 steps = 25
 scale = 7
 n_iter = 8
-seed = random.randint(0,1000000000) #332
+seed = -1
 
 negative_prompt = "leg, feet, legs, bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
 
 if opt.gender == "Male":
-  negative_prompt = "female"
+  negative_prompt += ", female"
 elif opt.gender == "Female":
-  negative_prompt = ", male"
+  negative_prompt += ", male"
 
 #for steps in ddim_configs:
 #  for scale in scale_configs:
 #    outdir = INF_OUTPUT_DIR + '/' + str(steps) + '_ddim_' + str(scale) + '_scale'
 
-samples_outdir = outdir + "/samples" 
+samples_outdir = outdir + "/samples"
 os.makedirs(samples_outdir)
 
 if is_socket_open(webui_host, webui_port):
   print(f"Cannot run program because another program is listening to {webui_port}")
   sys.exit()
 
-setup_automatic1111()
+try:
+  setup_automatic1111()
 
-while(not is_socket_open(webui_host, webui_port)):
+  while(not is_socket_open(webui_host, webui_port)):
     print("Webui not ready yet, sleeping for 5 secs...")
     time.sleep(5)
 
-print("Sleep another 15 secs to make sure it's ready")
-time.sleep(15)
+  print("Sleep another 15 secs to make sure it's ready")
+  time.sleep(15)
 
-for prompt in prompts:
-  run_inference(prompt_instance, prompt, negative_prompt, samples_outdir, path_to_trained_model, steps, scale, n_iter, seed)
+  for prompt in prompts:
+    if prompt['uid'] != 'tGep6e0cs1s5qZ9bpeQc':
+      continue
+    run_inference(prompt_instance, prompt, negative_prompt, samples_outdir, path_to_trained_model, steps, scale, n_iter, seed)
+  rename_files_and_write_metadata(samples_outdir, prompts, steps, scale, n_iter, seed)
 
-kill_automatic1111()
-
-rename_files_and_write_metadata(samples_outdir, prompts, steps, scale, n_iter, seed)
-
-upload_to_s3(Session_Name, samples_outdir)
-
+  upload_to_s3(Session_Name, samples_outdir)
+except Exception as err:
+  traceback.print_exc()
+finally:
+  kill_automatic1111()
