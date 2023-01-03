@@ -136,7 +136,7 @@ def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_
           "prompt": actual_prompt,
           "negative_prompt": negative_prompt,
           "steps": 35,
-          "denoising_strength": 0.28,
+          "denoising_strength": 0.22,
           "cfg_scale": cfg_scale,
           "sampler_index": "Euler a",
           "seed": seed,
