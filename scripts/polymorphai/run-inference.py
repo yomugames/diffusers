@@ -2,6 +2,8 @@
 # coding: utf-8
 
 import os
+import os.path
+from os import path
 import json
 import math
 import sys
@@ -9,6 +11,7 @@ from IPython.display import clear_output
 from IPython.utils import capture
 import time
 import uuid
+import urllib.request
 
 
 import fileinput
@@ -72,6 +75,11 @@ image_count = 1
 def setup_automatic1111():
   global webui_proc
   get_ipython().run_line_magic('cd', '/content/stable-diffusion-webui')
+  if not path.exists(path_to_trained_model):
+    print(path_to_trained_model + " missing...downloading from s3 instead")
+    ckpt_s3_path = "https://polymorph-ai.s3.amazonaws.com/inputs/" + Session_Name + "/" + Session_Name + ".ckpt"
+    urllib.request.urlretrieve(ckpt_s3_path, path_to_trained_model)
+
   webui_cmd = f'/content/stable-diffusion-webui/webui.sh  --disable-safe-unpickle --share --ckpt {path_to_trained_model} --api --port {webui_port} > /content/stable-diffusion-webui/webui.log 2>&1'
   webui_proc = subprocess.Popen(webui_cmd, shell=True, stdin=subprocess.PIPE, preexec_fn=os.setsid)
   print("setup:" + str(webui_proc))
@@ -144,7 +152,7 @@ def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_
           output_filename = input_image[:-8] + ".png"
           image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
           image.save(output_dir + '/' + output_filename)
-          image_count += 1
+        os.rename(output_dir + '/' + input_image, output_dir + '/tmps/' + input_image)
 
 def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, seed):
   files = os.listdir(output_dir)
@@ -244,6 +252,7 @@ elif opt.gender == "Female":
 
 samples_outdir = outdir + "/samples"
 os.makedirs(samples_outdir)
+os.makedirs(samples_outdir + "/tmps")
 
 if is_socket_open(webui_host, webui_port):
   print(f"Cannot run program because another program is listening to {webui_port}")
