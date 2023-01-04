@@ -6,6 +6,7 @@ import os.path
 from os import path
 import json
 import math
+import numpy
 import sys
 from IPython.display import clear_output
 from IPython.utils import capture
@@ -28,8 +29,9 @@ import re
 import requests
 import io
 import base64
+import face_recognition
 from gradio.processing_utils import encode_pil_to_base64
-from PIL import Image
+from PIL import Image, ImageDraw
 import socket
 from contextlib import closing
 import mysql.connector
@@ -71,6 +73,29 @@ automatic_web_url = f'http://{webui_host}:{webui_port}'
 webui_proc = ""
 
 image_count = 1
+
+# copied from https://github.com/mix1009/sdwebuiapi/blob/main/webuiapi/webuiapi.py
+def b64_img(image: Image):
+  buffered = io.BytesIO()
+  image.save(buffered, format="PNG")
+  img_base64 = 'data:image/png;base64,' + str(base64.b64encode(buffered.getvalue()), 'utf-8')
+  return img_base64
+
+# returns [top, right, bottom, left], defaults to full image if can't find a face
+def get_face_location(image: Image):
+  # get face coordinates first
+  image = image.convert('RGB')
+  np_image_file = numpy.array(image)
+  face_locations = face_recognition.face_locations(np_image_file)
+  if not face_locations:
+    width, height = image.size
+    return [0, width, height, 0]
+
+  return face_locations[0]
+
+def convert_trbl_to_xy_shape(tuple):
+  top, right, bottom, left = tuple
+  return [(left, top), (right, bottom)]
 
 def setup_automatic1111():
   global webui_proc
@@ -127,14 +152,27 @@ def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_
     actual_prompt = prompt['img2img_prompt'].replace("<instance>",prompt_instance)
     files = os.listdir(output_dir)
     image_files = [f for f in files if os.path.isfile(output_dir+'/'+f) and f.endswith(".tmp.png")]
-    for input_image in image_files:
+    for input_image_file_name in image_files:
       with capture.capture_output() as cap:
-        full_base64 = encode_pil_to_base64(Image.open(output_dir + '/' + input_image, "r"))
+        input_image = Image.open(output_dir + '/' + input_image_file_name, "r")
+        full_base64 = encode_pil_to_base64(input_image)
+
+        # do inpainting
+        mask = Image.new('RGB', input_image.size, color = 'black')
+        draw = ImageDraw.Draw(mask)
+        trbl_location = get_face_location(input_image)
+        shape = convert_trbl_to_xy_shape(trbl_location)
+        draw.rectangle(shape, fill='white')
 
         payload = {
           "init_images": [full_base64],
           "prompt": actual_prompt,
           "negative_prompt": negative_prompt,
+          "mask": b64_img(mask),
+          "mask_blur": 4,
+          "inpaint_full_res": True,
+          "inpainting_fill": 1,
+          "inpaint_full_res_padding": 30,
           "steps": 35,
           "denoising_strength": 0.22,
           "cfg_scale": cfg_scale,
@@ -148,11 +186,12 @@ def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_
         response = requests.post(url=f'{automatic_web_url}/sdapi/v1/img2img', json=payload)
         json_response = response.json()
 
-        for i in json_response['images']:
-          output_filename = input_image[:-8] + ".png"
-          image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
-          image.save(output_dir + '/' + output_filename)
-        os.rename(output_dir + '/' + input_image, output_dir + '/tmps/' + input_image)
+        # since we do a loopback w/ the img2img, we want to get the final version (eg. final image)
+        final_image = json_response['images'][-1]
+        output_filename = input_image_file_name[:-8] + ".png"
+        image = Image.open(io.BytesIO(base64.b64decode(final_image.split(",",1)[0])))
+        image.save(output_dir + '/' + output_filename)
+        os.rename(output_dir + '/' + input_image_file_name, output_dir + '/tmps/' + input_image_file_name)
 
 def rename_files_and_write_metadata(output_dir, prompts, steps, scale, n_iter, seed):
   files = os.listdir(output_dir)
@@ -276,4 +315,8 @@ try:
 except Exception as err:
   traceback.print_exc()
 finally:
-  kill_automatic1111()
+  try:
+    kill_automatic1111()
+  except Exception as err:
+    print("Ignoring error when terminating automatic web ui")
+    traceback.print_exc()
