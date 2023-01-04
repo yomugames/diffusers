@@ -174,7 +174,7 @@ def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_
           "inpainting_fill": 1,
           "inpaint_full_res_padding": 30,
           "steps": 35,
-          "denoising_strength": 0.22,
+          "denoising_strength": 0.24,
           "cfg_scale": cfg_scale,
           "sampler_index": "Euler a",
           "seed": seed,
@@ -278,12 +278,12 @@ scale = 7
 n_iter = 8
 seed = -1
 
-negative_prompt = "leg, feet, legs, bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
+negative_prompt = "body out of frame, watermark, full body, waist, hips, leg, feet, legs, bad anatomy, bad proportions, blurry, cloned face, deformed, disfigured, duplicate, extra arms, extra fingers, extra limbs, extra legs, fused fingers, gross proportions, long neck, malformed limbs, missing arms, missing legs, mutated hands, mutation, mutilated, morbid, out of frame, poorly drawn hands, poorly drawn face, too many fingers, ugly"
 
 if opt.gender == "Male":
-  negative_prompt += ", female"
+  negative_prompt += ", female, girl, woman, breast, boobs"
 elif opt.gender == "Female":
-  negative_prompt += ", male"
+  negative_prompt += ", male, man, boy, guy"
 
 #for steps in ddim_configs:
 #  for scale in scale_configs:
