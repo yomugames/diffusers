@@ -174,7 +174,7 @@ def run_inference(prompt_instance, prompt, negative_prompt, output_dir, path_to_
           "inpainting_fill": 1,
           "inpaint_full_res_padding": 30,
           "steps": 35,
-          "denoising_strength": 0.24,
+          "denoising_strength": 0.3,
           "cfg_scale": cfg_scale,
           "sampler_index": "Euler a",
           "seed": seed,
